@@ -1,0 +1,27 @@
+#!/usr/bin/env sh
+# Lightweight wrapper bootstrap. Downloads the pinned Gradle distribution if it is not cached.
+set -eu
+VERSION="9.6.0"
+GRADLE_USER_HOME="${GRADLE_USER_HOME:-$HOME/.gradle}"
+DIST_DIR="$GRADLE_USER_HOME/wrapper/dists/gradle-$VERSION-bin/fincip-native"
+GRADLE_BIN="$DIST_DIR/gradle-$VERSION/bin/gradle"
+if [ ! -x "$GRADLE_BIN" ]; then
+  mkdir -p "$DIST_DIR"
+  TMP_ZIP="$DIST_DIR/gradle-$VERSION-bin.zip"
+  echo "Gradle $VERSION is not cached. Downloading the Gradle distribution..."
+  if command -v curl >/dev/null 2>&1; then
+    curl -fL --retry 2 "https://services.gradle.org/distributions/gradle-$VERSION-bin.zip" -o "$TMP_ZIP"
+  elif command -v wget >/dev/null 2>&1; then
+    wget -O "$TMP_ZIP" "https://services.gradle.org/distributions/gradle-$VERSION-bin.zip"
+  else
+    echo "Install curl or wget, or install Gradle $VERSION manually." >&2
+    exit 1
+  fi
+  if command -v unzip >/dev/null 2>&1; then
+    unzip -q -o "$TMP_ZIP" -d "$DIST_DIR"
+  else
+    echo "Please install unzip and run ./gradlew again." >&2
+    exit 1
+  fi
+fi
+exec "$GRADLE_BIN" "$@"
