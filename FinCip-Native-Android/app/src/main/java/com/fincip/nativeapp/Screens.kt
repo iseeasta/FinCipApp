@@ -2,6 +2,8 @@ package com.fincip.nativeapp
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import com.fincip.nativeapp.data.currentMonth
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -633,8 +635,14 @@ fun TaxScreen(
     PageColumn {
         PageHeading("GLOBAL TAX PLANNING", "A clearer tax picture.", "Choose a jurisdiction and build an annual estimate in local currency. India uses a simplified slab model; other countries use your own effective-rate assumptions.")
         NeoCard {
-            Selector("Tax jurisdiction", selectedCountry.second, countries.map { it.second }) { label -> onCountry(countries.first { it.second == label }.first) }
-            Field("Tax year / period", taxYear, onTaxYear, hint = "Use the tax year or fiscal period that applies to you.")
+Selector(
+    label = "Tax jurisdiction",
+    value = selectedCountry.second,
+    options = countries.map { it.second },
+    onSelect = { label ->
+        onCountry(countries.first { it.second == label }.first)
+    }
+)            Field("Tax year / period", taxYear, onTaxYear, hint = "Use the tax year or fiscal period that applies to you.")
             Field("Annual gross income ($currency)", income, onIncome)
             if (india) {
                 Selector("Tax regime", regime, listOf("new", "old"), onRegime)
