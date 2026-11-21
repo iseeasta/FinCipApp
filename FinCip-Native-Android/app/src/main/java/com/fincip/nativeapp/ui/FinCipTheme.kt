@@ -2,7 +2,9 @@ package com.fincip.nativeapp.ui
 
 import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Shapes
 import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.dynamicDarkColorScheme
@@ -10,10 +12,58 @@ import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+
+
+/** FinCip "Pastel Pop" design tokens: soft colour-blocking, big radii, ink-dark accents. */
+object Pop {
+    val Cream = Color(0xFFFFF8E1)
+    val Ink = Color(0xFF1E1B2E)
+    val Coral = Color(0xFFF26D85)
+    val Teal = Color(0xFF2E8C7F)
+    val Sun = Color(0xFFF7B733)
+    val Lavender = Color(0xFFB7A8F5)
+    val Peach = Color(0xFFF8A66B)
+    val Mint = Color(0xFFCFEBD8)
+    val Indigo = Color(0xFF26214A)
+    val IndigoHi = Color(0xFF332D63)
+    val Gain = Color(0xFF1F9D63)
+    val Loss = Color(0xFFE5484D)
+    val Radius = 28.dp
+    val RadiusSmall = 18.dp
+}
+
+/** Readable text colour for any block colour, in light and dark mode. */
+fun contentOn(bg: Color): Color = if (bg.luminance() > 0.42f) Pop.Ink else Pop.Cream
+
+private fun popLight() = lightColorScheme(
+    primary = Pop.Ink, onPrimary = Pop.Cream,
+    secondary = Pop.Coral, onSecondary = Color.White,
+    tertiary = Pop.Teal, onTertiary = Color.White,
+    background = Pop.Cream, onBackground = Pop.Ink,
+    surface = Color.White, onSurface = Pop.Ink,
+    surfaceVariant = Color(0xFFF3ECCB), onSurfaceVariant = Color(0xFF4A4660),
+    secondaryContainer = Color(0xFFFFE08A), onSecondaryContainer = Pop.Ink,
+    primaryContainer = Pop.Lavender, onPrimaryContainer = Pop.Ink,
+    outline = Color(0xFFCFC8A8), outlineVariant = Color(0xFFE6DFBC)
+)
+
+private fun popDark() = darkColorScheme(
+    primary = Color(0xFFF6C98D), onPrimary = Pop.Ink,
+    secondary = Pop.Coral, onSecondary = Color.White,
+    tertiary = Pop.Teal, onTertiary = Color.White,
+    background = Pop.Indigo, onBackground = Pop.Cream,
+    surface = Pop.IndigoHi, onSurface = Pop.Cream,
+    surfaceVariant = Color(0xFF3D3775), onSurfaceVariant = Color(0xFFD9D3F2),
+    secondaryContainer = Color(0xFF4C4488), onSecondaryContainer = Pop.Cream,
+    primaryContainer = Color(0xFF5A4FA3), onPrimaryContainer = Pop.Cream,
+    outline = Color(0xFF5B5499), outlineVariant = Color(0xFF443E7D)
+)
 
 @Composable
 fun FinCipTheme(vibe: String, dark: Boolean, content: @Composable () -> Unit) {
@@ -22,6 +72,7 @@ fun FinCipTheme(vibe: String, dark: Boolean, content: @Composable () -> Unit) {
     val useDark = dark || ((vibe == "System" || vibe == "Material You") && systemDark)
 
     val scheme = when (vibe) {
+        "Pastel Pop" -> if (useDark) popDark() else popLight()
         "Material You", "System" -> if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             if (useDark) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
         } else if (useDark) fallbackDark() else fallbackLight()
@@ -57,8 +108,8 @@ fun FinCipTheme(vibe: String, dark: Boolean, content: @Composable () -> Unit) {
     val typo = Typography().let { base ->
         val family = if (vibe == "Receipt Paper") FontFamily.Monospace else FontFamily.SansSerif
         base.copy(
-            headlineLarge = base.headlineLarge.copy(fontFamily = family, fontWeight = FontWeight.Black, fontSize = 30.sp, lineHeight = 34.sp),
-            headlineMedium = base.headlineMedium.copy(fontFamily = family, fontWeight = FontWeight.ExtraBold),
+            headlineLarge = base.headlineLarge.copy(fontFamily = family, fontWeight = FontWeight.Black, fontSize = 34.sp, lineHeight = 38.sp, letterSpacing = (-0.8).sp),
+            headlineMedium = base.headlineMedium.copy(fontFamily = family, fontWeight = FontWeight.ExtraBold, fontSize = 27.sp, lineHeight = 31.sp, letterSpacing = (-0.5).sp),
             titleLarge = base.titleLarge.copy(fontFamily = family, fontWeight = FontWeight.ExtraBold),
             titleMedium = base.titleMedium.copy(fontFamily = family, fontWeight = FontWeight.Bold),
             bodyLarge = base.bodyLarge.copy(fontFamily = family),
@@ -66,7 +117,12 @@ fun FinCipTheme(vibe: String, dark: Boolean, content: @Composable () -> Unit) {
             labelLarge = base.labelLarge.copy(fontFamily = family, fontWeight = FontWeight.Bold)
         )
     }
-    MaterialTheme(colorScheme = scheme, typography = typo, content = content)
+    val shapes = Shapes(
+        extraSmall = RoundedCornerShape(10.dp), small = RoundedCornerShape(14.dp),
+        medium = RoundedCornerShape(Pop.RadiusSmall), large = RoundedCornerShape(Pop.Radius),
+        extraLarge = RoundedCornerShape(32.dp)
+    )
+    MaterialTheme(colorScheme = scheme, typography = typo, shapes = shapes, content = content)
 }
 
 private fun fallbackLight() = lightColorScheme(

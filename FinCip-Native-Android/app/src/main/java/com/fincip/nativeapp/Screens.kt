@@ -18,7 +18,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material3.Icon
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -63,6 +67,11 @@ import com.fincip.nativeapp.data.string
 import com.fincip.nativeapp.data.toBase
 import com.fincip.nativeapp.data.transactions
 import com.fincip.nativeapp.ui.Field
+import com.fincip.nativeapp.ui.MiniBars
+import com.fincip.nativeapp.ui.Pop
+import com.fincip.nativeapp.ui.PopChip
+import com.fincip.nativeapp.ui.contentOn
+import com.fincip.nativeapp.data.parseMonth
 import com.fincip.nativeapp.ui.MetricTile
 import com.fincip.nativeapp.ui.NeoButton
 import com.fincip.nativeapp.ui.NeoCard
@@ -87,7 +96,7 @@ private val Blue = Color(0xFF579CD4)
 
 @Composable
 private fun PageColumn(content: @Composable ColumnScope.() -> Unit) {
-    Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(15.dp), content = content)
+    Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(14.dp), content = content)
 }
 
 @Composable
@@ -97,7 +106,7 @@ private fun PageHeading(eyebrow: String, title: String, description: String = ""
 
 @Composable
 private fun InlineAction(text: String, onClick: () -> Unit) {
-    Text(text, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Black, modifier = Modifier.clickable(onClick = onClick).padding(vertical = 6.dp))
+    Text(text, color = MaterialTheme.colorScheme.onPrimary, fontWeight = FontWeight.Black, style = MaterialTheme.typography.labelLarge, modifier = Modifier.clip(RoundedCornerShape(50)).background(MaterialTheme.colorScheme.primary).clickable(onClick = onClick).padding(horizontal = 14.dp, vertical = 8.dp))
 }
 
 @Composable
@@ -126,33 +135,80 @@ fun OverviewScreen(workspace: JsonObject, month: String, privacy: Boolean, savin
             "expenses" to Triple("Spending · $month", if (privacy) "••••" else money(expenses, base), "Money spent"),
             "savings" to Triple("Savings rate", if (income > 0 && !privacy) "${"%.1f".format(savingsRate)}%" else if (privacy) "••%" else "—", "Monthly income less spending")
         )
+        val metricFill = mapOf("balance" to Pop.Teal, "income" to Pop.Mint, "expenses" to Pop.Coral, "savings" to Pop.Lavender)
         val validMetricKeys = metricDefinitions.map { it.first }
         val storedOrder = workspace.objectOrEmpty("settings").arrayOrEmpty("dashboardOrder").map { it.asStringOr() }
         val metricOrder = (storedOrder.filter { it in validMetricKeys }.distinct() + validMetricKeys.filterNot { it in storedOrder }).take(4)
-        metricOrder.chunked(2).forEach { pair ->
-            Row(horizontalArrangement = Arrangement.spacedBy(9.dp)) {
+
+        // Hero: the first metric in the user's dashboard order dominates the screen.
+        val heroKey = metricOrder.first()
+        val hero = metricDefinitions.first { it.first == heroKey }.second
+        val heroFill = metricFill.getValue(heroKey)
+        val heroFg = contentOn(heroFill)
+        NeoCard(fill = heroFill) {
+            Row(verticalAlignment = Alignment.Top) {
+                Column(Modifier.weight(1f)) {
+                    Text(hero.first.uppercase(), style = MaterialTheme.typography.labelSmall, letterSpacing = 1.4.sp, fontWeight = FontWeight.Black, color = heroFg.copy(alpha = .75f))
+                    Spacer(Modifier.height(6.dp))
+                    val numSize = when { hero.second.length <= 9 -> 46.sp; hero.second.length <= 13 -> 38.sp; else -> 30.sp }
+                    Text(hero.second, fontSize = numSize, lineHeight = numSize, fontWeight = FontWeight.Black, letterSpacing = (-1).sp, color = heroFg, maxLines = 1, softWrap = false)
+                    Spacer(Modifier.height(4.dp))
+                    Text(hero.third, style = MaterialTheme.typography.bodySmall, color = heroFg.copy(alpha = .8f))
+                }
+                Box(Modifier.size(46.dp).clip(CircleShape).background(heroFg).clickable(onClick = onAdd), contentAlignment = Alignment.Center) {
+                    Icon(Icons.Default.Add, contentDescription = "Add transaction", tint = heroFill, modifier = Modifier.size(24.dp))
+                }
+            }
+            if (income > 0 && !privacy) {
+                Spacer(Modifier.height(14.dp))
+                ProgressBar((savingsRate / 100.0).toFloat(), color = Pop.Sun)
+                Spacer(Modifier.height(6.dp))
+                Text("${"%.0f".format(savingsRate.coerceIn(-999.0, 999.0))}% of $month income kept", style = MaterialTheme.typography.labelSmall, color = heroFg.copy(alpha = .8f), fontWeight = FontWeight.Bold)
+            }
+        }
+        val rest = metricOrder.drop(1)
+        rest.take(2).let { pair ->
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 pair.forEach { key ->
                     val metric = metricDefinitions.first { it.first == key }.second
-                    Box(Modifier.weight(1f)) { MetricTile(metric.first, metric.second, metric.third) }
+                    Box(Modifier.weight(1f)) { MetricTile(metric.first, metric.second, metric.third, fill = metricFill.getValue(key)) }
                 }
                 if (pair.size == 1) Spacer(Modifier.weight(1f))
             }
         }
-        NeoCard(fill = Color(0xFFFFF0B5)) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(13.dp)) {
-                Box(Modifier.size(70.dp).background(mascotAccent, RoundedCornerShape(16.dp)).border(2.dp, Color.Black, RoundedCornerShape(16.dp)), contentAlignment = Alignment.Center) {
-                    Text(mascotEmoji, fontSize = 38.sp)
+        rest.drop(2).forEach { key ->
+            val metric = metricDefinitions.first { it.first == key }.second
+            MetricTile(metric.first, metric.second, metric.third, fill = metricFill.getValue(key))
+        }
+
+        if (allTransactions.isNotEmpty()) {
+            val selectedMonth = parseMonth(month)
+            val months = (5 downTo 0).map { selectedMonth.minusMonths(it.toLong()) }
+            val spend = months.map { if (privacy) 0.0 else expenseTotal(workspace, it.toString()) }
+            NeoCard {
+                Text("LAST 6 MONTHS · SPENDING", style = MaterialTheme.typography.labelSmall, letterSpacing = 1.2.sp, fontWeight = FontWeight.Black, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .6f))
+                Spacer(Modifier.height(4.dp))
+                Text(if (privacy) "••••" else money(expenses, base), style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Black)
+                Spacer(Modifier.height(14.dp))
+                MiniBars(values = spend, labels = months.map { it.format(DateTimeFormatter.ofPattern("MMM", Locale.ENGLISH)) }, highlight = months.lastIndex, accent = Pop.Coral)
+            }
+        }
+
+        NeoCard(fill = Pop.Sun) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                Box(Modifier.size(68.dp).background(mascotAccent, CircleShape), contentAlignment = Alignment.Center) {
+                    Text(mascotEmoji, fontSize = 36.sp)
                 }
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text("${pet.string("name", "Mochi")} · your money mascot", fontWeight = FontWeight.Black, color = Color(0xFF171717))
-                    Text(mood, color = Color(0xFF34311E), style = MaterialTheme.typography.bodySmall)
-                    Text("Tap to customize your pal →", color = Color(0xFF34311E), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelSmall, modifier = Modifier.clickable(onClick = onMascot))
+                    Text("${pet.string("name", "Mochi")} · your money mascot", fontWeight = FontWeight.Black, color = Pop.Ink)
+                    Text(mood, color = Pop.Ink.copy(alpha = .8f), style = MaterialTheme.typography.bodySmall)
+                    Text("Tap to customize your pal →", color = Pop.Ink, fontWeight = FontWeight.Black, style = MaterialTheme.typography.labelSmall, modifier = Modifier.clickable(onClick = onMascot).padding(vertical = 4.dp))
                 }
             }
         }
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("Recent movement", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Black, modifier = Modifier.weight(1f))
-            InlineAction("Add transaction +", onAdd)
+            InlineAction("Add +", onAdd)
         }
         if (allTransactions.isEmpty()) NeoCard { Text("Your first money move starts here.", fontWeight = FontWeight.Bold); Text("Add income or an expense to see your dashboard come alive.", style = MaterialTheme.typography.bodySmall) }
         allTransactions.takeLast(5).asReversed().forEach { TransactionCard(it, privacy, onClick = onAdd, onDelete = {}) }
@@ -183,7 +239,7 @@ private fun TransactionCard(item: JsonObject, privacy: Boolean, onClick: () -> U
     val income = item.string("type") == "income"
     NeoCard {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            Box(Modifier.size(38.dp).background(if (income) Green.copy(alpha = .22f) else Red.copy(alpha = .22f), RoundedCornerShape(10.dp)).border(1.5.dp, Color.Black, RoundedCornerShape(10.dp)), contentAlignment = Alignment.Center) { Text(if (income) "↙" else "↗", fontWeight = FontWeight.Black) }
+            Box(Modifier.size(42.dp).background(if (income) Pop.Mint else Pop.Coral.copy(alpha = .28f), CircleShape), contentAlignment = Alignment.Center) { Text(if (income) "↙" else "↗", fontWeight = FontWeight.Black, color = Pop.Ink) }
             Column(Modifier.weight(1f)) {
                 Text(item.string("title", "Transaction"), fontWeight = FontWeight.Black)
                 Text("${item.string("category", "Other")} · ${item.string("date")} · ${item.string("account", "Account")}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .65f))
@@ -512,61 +568,156 @@ fun SimulatorScreen(workspace: JsonObject) {
     }
 }
 
+private val GainDark = Color(0xFF0B6B3A)
+private val LossDark = Color(0xFFB3202A)
+
+private fun kindFill(kind: String): Color = when (kind) {
+    "SIP" -> Pop.Lavender
+    "Mutual fund" -> Pop.Peach
+    "EPF" -> Pop.Mint
+    "PPF" -> Color(0xFFB8E3F2)
+    "NPS" -> Color(0xFFFFE08A)
+    "FD" -> Color(0xFFF9C6D0)
+    "RD" -> Color(0xFFD9F0A3)
+    "Gold" -> Pop.Sun
+    else -> Color(0xFFE4DFF5)
+}
+
+/** Dated cash flows (negative = money in) for one product, before the closing value is added. */
+private fun productFlows(p: JsonObject, invested: Double): MutableList<Pair<LocalDate, Double>> {
+    val flows = p.arrayOrEmpty("contributions").objects().mapNotNull { c ->
+        val date = runCatching { LocalDate.parse(c.string("date")) }.getOrNull() ?: return@mapNotNull null
+        date to -kotlin.math.abs(c.double("amount"))
+    }.toMutableList()
+    if (flows.isEmpty() && invested > 0) {
+        val start = runCatching { LocalDate.parse(p.string("startDate")) }.getOrNull() ?: LocalDate.now()
+        flows.add(start to -invested)
+    }
+    return flows
+}
+
+@Composable
+private fun EmptyPortfolioArt(modifier: Modifier = Modifier) {
+    val bars = listOf(Pop.Lavender to 0.38f, Pop.Peach to 0.62f, Pop.Sun to 0.85f)
+    Row(modifier.height(110.dp), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.Bottom) {
+        bars.forEach { (color, frac) ->
+            Box(Modifier.size(width = 34.dp, height = 110.dp * frac).clip(RoundedCornerShape(topStart = 17.dp, topEnd = 17.dp, bottomStart = 6.dp, bottomEnd = 6.dp)).background(color))
+        }
+        Box(Modifier.size(34.dp).clip(CircleShape).background(Pop.Coral))
+    }
+}
+
 @Composable
 fun IndiaFinanceScreen(workspace: JsonObject, privacy: Boolean, onAdd: () -> Unit, onDelete: (JsonObject) -> Unit, onContribute: (JsonObject) -> Unit) {
     val products = workspace.arrayOrEmpty("financeProducts").objects()
     val base = workspace.objectOrEmpty("settings").string("baseCurrency", "INR")
     val investedTotal = products.sumOf { toBase(workspace, it.double("invested"), it.string("currency", "INR")) }
     val currentTotal = products.sumOf { toBase(workspace, it.double("currentValue", it.double("value")), it.string("currency", "INR")) }
+    val gainTotal = currentTotal - investedTotal
+    val returnPct = if (investedTotal > 0) gainTotal / investedTotal * 100.0 else null
+    // Portfolio-level XIRR: every dated contribution (converted to base) plus today's total value.
+    val portfolioFlows = products.flatMap { p ->
+        val cur = p.string("currency", "INR")
+        productFlows(p, p.double("invested", p.double("amount"))).map { (d, amt) -> d to toBase(workspace, amt, cur) }
+    }.toMutableList().also { it.add(LocalDate.now() to currentTotal) }
+    val portfolioXirr = estimateXirr(portfolioFlows)
+    var selectedKind by remember { mutableStateOf("All") }
+    val standardKinds = listOf("SIP", "Mutual fund", "EPF", "PPF", "NPS", "FD", "RD", "Gold")
+    val kinds = standardKinds + products.map { it.string("kind", it.string("type", "Product")) }.filter { it !in standardKinds }.distinct()
+    val shown = if (selectedKind == "All") products else products.filter { it.string("kind", it.string("type", "Product")) == selectedKind }
+    val gainFg = if (gainTotal >= 0) GainDark else LossDark
+
     PageColumn {
-        PageHeading("LONG-TERM MONEY", "India finance, organized.", "Track SIPs, mutual funds, EPF, PPF, NPS, fixed deposits and recurring deposits. Values are entered by you.")
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Box(Modifier.weight(1f)) { MetricTile("Invested", if (privacy) "••••" else money(investedTotal, base)) }
-            Box(Modifier.weight(1f)) { MetricTile("Current value", if (privacy) "••••" else money(currentTotal, base)) }
+        PageHeading("INDIA / WEALTH TRACKER", "Your long-term money, under control.", "SIPs, mutual funds, EPF, PPF, NPS, deposits and gold in one place. Values are entered by you.")
+
+        NeoCard(fill = Pop.Lavender) {
+            Text("PORTFOLIO VALUE", style = MaterialTheme.typography.labelSmall, letterSpacing = 1.4.sp, fontWeight = FontWeight.Black, color = Pop.Ink.copy(alpha = .7f))
+            Spacer(Modifier.height(6.dp))
+            val valueText = if (privacy) "••••••" else money(currentTotal, base)
+            val numSize = when { valueText.length <= 9 -> 46.sp; valueText.length <= 13 -> 38.sp; else -> 30.sp }
+            Text(valueText, fontSize = numSize, lineHeight = numSize, fontWeight = FontWeight.Black, letterSpacing = (-1).sp, color = Pop.Ink, maxLines = 1, softWrap = false)
+            Spacer(Modifier.height(10.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    if (privacy) "••••" else (if (gainTotal >= 0) "▲ " else "▼ ") + money(kotlin.math.abs(gainTotal), base),
+                    color = gainFg, fontWeight = FontWeight.Black,
+                    modifier = Modifier.clip(RoundedCornerShape(50)).background(Color.White.copy(alpha = .7f)).padding(horizontal = 12.dp, vertical = 6.dp)
+                )
+                Text("absolute gain", style = MaterialTheme.typography.bodySmall, color = Pop.Ink.copy(alpha = .75f))
+            }
         }
-        MetricTile("Tracked products", products.size.toString(), "Manual account records")
-        NeoButton("+ Add finance product", onClick = onAdd)
-        val kinds = listOf("SIP", "Mutual fund", "EPF", "PPF", "NPS", "FD", "RD", "Gold")
-        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(7.dp)) { kinds.forEach { kind -> SmallPill(kind) } }
-        if (products.isEmpty()) NeoCard { Text("No products added", fontWeight = FontWeight.Black); Text("Add balances from your statements. FinCip does not connect directly to providers.", style = MaterialTheme.typography.bodySmall) }
-        products.forEach { p ->
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Box(Modifier.weight(1f)) { MetricTile("Total returns", if (privacy) "••%" else returnPct?.let { "%+.2f%%".format(it) } ?: "—", "On invested amount", fill = if (gainTotal >= 0) Pop.Mint else Color(0xFFF9C6D0)) }
+            Box(Modifier.weight(1f)) { MetricTile("XIRR", if (privacy) "••%" else portfolioXirr?.let { "%.2f%%".format(it) } ?: "—", "Annualised, all products", fill = Pop.Sun) }
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Box(Modifier.weight(1f)) { MetricTile("Invested", if (privacy) "••••" else money(investedTotal, base), "Total contributed") }
+            Box(Modifier.weight(1f)) { MetricTile("Tracked", products.size.toString(), if (products.size == 1) "product" else "products", fill = Pop.Peach) }
+        }
+        NeoButton("+  Add investment", modifier = Modifier.fillMaxWidth(), onClick = onAdd)
+
+        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            PopChip("All", selectedKind == "All", { selectedKind = "All" })
+            kinds.forEach { kind -> PopChip(kind, selectedKind == kind, { selectedKind = kind }) }
+        }
+
+        if (products.isEmpty()) {
+            NeoCard {
+                EmptyPortfolioArt()
+                Spacer(Modifier.height(16.dp))
+                Text("NO ASSETS TRACKED.", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Black)
+                Spacer(Modifier.height(4.dp))
+                Text("Your portfolio starts here.", fontWeight = FontWeight.Bold)
+                Spacer(Modifier.height(4.dp))
+                Text("Add your first investment to begin tracking your financial journey. FinCip does not connect to providers; you enter balances from your statements.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .7f))
+            }
+        } else if (shown.isEmpty()) {
+            Text("Nothing under $selectedKind yet. Tap Add investment and pick $selectedKind as the product type.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onBackground.copy(alpha = .7f))
+        }
+
+        shown.forEach { p ->
             val invested = p.double("invested", p.double("amount"))
             val current = p.double("currentValue", p.double("value"))
             val gain = current - invested
             val currency = p.string("currency", "INR")
             val kind = p.string("kind", p.string("type", "Product"))
-            val flows = p.arrayOrEmpty("contributions").objects().mapNotNull { c ->
-                val date = runCatching { LocalDate.parse(c.string("date")) }.getOrNull() ?: return@mapNotNull null
-                date to -kotlin.math.abs(c.double("amount"))
-            }.toMutableList()
-            if (flows.isEmpty() && invested > 0) {
-                val start = runCatching { LocalDate.parse(p.string("startDate")) }.getOrNull() ?: LocalDate.now()
-                flows.add(start to -invested)
-            }
+            val flows = productFlows(p, invested)
             flows.add(LocalDate.now() to current)
             val irr = estimateXirr(flows)
             val years = runCatching { ChronoUnit.DAYS.between(LocalDate.parse(p.string("startDate")), LocalDate.now()).toDouble() / 365.25 }.getOrNull() ?: 0.0
             val cagr = if (invested > 0 && current >= 0 && years > 0.01) ((current / invested).pow(1.0 / years) - 1.0) * 100.0 else null
-            NeoCard {
-                Row(verticalAlignment = Alignment.CenterVertically) {
+            NeoCard(fill = kindFill(kind)) {
+                Row(verticalAlignment = Alignment.Top) {
                     Column(Modifier.weight(1f)) {
-                        Text(p.string("name", "Investment"), fontWeight = FontWeight.Black)
-                        Text("$kind · ${p.string("provider", "Provider not specified")}", style = MaterialTheme.typography.bodySmall)
+                        Text(kind.uppercase(), style = MaterialTheme.typography.labelSmall, letterSpacing = 1.2.sp, fontWeight = FontWeight.Black, color = Pop.Ink.copy(alpha = .7f))
+                        Text(p.string("name", "Investment"), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Black, color = Pop.Ink)
+                        Text(p.string("provider", "Provider not specified"), style = MaterialTheme.typography.bodySmall, color = Pop.Ink.copy(alpha = .75f))
                     }
-                    Text(if (privacy) "••••" else money(current, currency), fontWeight = FontWeight.Black)
-                    Text("×", modifier = Modifier.clickable { onDelete(p) }.padding(8.dp))
+                    Box(Modifier.size(36.dp).clip(CircleShape).background(Color.White.copy(alpha = .55f)).clickable { onDelete(p) }, contentAlignment = Alignment.Center) {
+                        Text("×", fontWeight = FontWeight.Black, color = Pop.Ink, fontSize = 18.sp)
+                    }
                 }
-                Text("Invested ${if (privacy) "••••" else money(invested, currency)} · Change ${if (privacy) "••••" else money(gain, currency)}", style = MaterialTheme.typography.bodySmall, color = if (gain >= 0) Green else Red)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Spacer(Modifier.height(10.dp))
+                Text(if (privacy) "••••" else money(current, currency), fontSize = 30.sp, fontWeight = FontWeight.Black, letterSpacing = (-0.5).sp, color = Pop.Ink, maxLines = 1)
+                Text(
+                    "Invested ${if (privacy) "••••" else money(invested, currency)}  ·  ${if (gain >= 0) "▲" else "▼"} ${if (privacy) "••••" else money(kotlin.math.abs(gain), currency)}",
+                    style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold, color = if (gain >= 0) GainDark else LossDark
+                )
+                Spacer(Modifier.height(10.dp))
+                Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     SmallPill("XIRR ${irr?.let { "%.2f%%".format(it) } ?: "—"}")
                     SmallPill("CAGR ${cagr?.let { "%.2f%%".format(it) } ?: "—"}")
                     if (p.double("monthlyContribution") > 0) SmallPill("Monthly ${money(p.double("monthlyContribution"), currency)}")
                 }
-                if (p.string("maturityDate").isNotBlank()) Text("Maturity · ${p.string("maturityDate")}", style = MaterialTheme.typography.labelSmall)
-                NeoOutlineButton("+ Add contribution", { onContribute(p) })
+                if (p.string("maturityDate").isNotBlank()) {
+                    Spacer(Modifier.height(8.dp))
+                    Text("MATURITY  ${p.string("maturityDate")}", style = MaterialTheme.typography.labelSmall, letterSpacing = 1.sp, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace, color = Pop.Ink.copy(alpha = .8f))
+                }
+                Spacer(Modifier.height(12.dp))
+                NeoOutlineButton("+ Add contribution", { onContribute(p) }, Modifier.fillMaxWidth())
             }
         }
-        Text("XIRR is an annualized estimate from dated contributions and current value. CAGR assumes one initial investment; for recurring SIPs, XIRR is usually more informative. These calculations depend on the dates and values you enter.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .65f))
+        Text("XIRR is an annualized estimate from dated contributions and current value. CAGR assumes one initial investment; for recurring SIPs, XIRR is usually more informative. These calculations depend on the dates and values you enter.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onBackground.copy(alpha = .6f))
     }
 }
 
@@ -594,7 +745,7 @@ private fun estimateXirr(flows: List<Pair<LocalDate, Double>>): Double? {
 }
 
 @Composable
-private fun SmallPill(text: String) { Surface(shape = RoundedCornerShape(7.dp), color = MaterialTheme.colorScheme.secondaryContainer, border = BorderStroke(1.dp, Color.Black)) { Text(text, Modifier.padding(horizontal = 9.dp, vertical = 6.dp), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelSmall) } }
+private fun SmallPill(text: String) { Surface(shape = RoundedCornerShape(50), color = Color.White.copy(alpha = .7f), contentColor = Pop.Ink) { Text(text, Modifier.padding(horizontal = 12.dp, vertical = 6.dp), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelSmall, maxLines = 1) } }
 
 @Composable
 fun TaxScreen(
@@ -809,7 +960,7 @@ fun SettingsScreen(workspace: JsonObject, vibe: String, onVibe: (String) -> Unit
         PageHeading("MAKE THE APP FEEL LIKE YOURS", "Set your FinCip vibe.", "Material You dynamic color, playful palettes, and a mascot that grows with your habits.")
         NeoCard {
             Text("Vibe themes", fontWeight = FontWeight.Black, style = MaterialTheme.typography.titleLarge)
-            listOf("Material You", "Y2K Acid", "Cozy Lo-Fi", "Receipt Paper").forEach { item -> Row(Modifier.fillMaxWidth().clickable { onVibe(item) }.padding(vertical = 7.dp), verticalAlignment = Alignment.CenterVertically) { Text(if (vibe == item) "●" else "○", Modifier.padding(end = 9.dp), color = MaterialTheme.colorScheme.primary); Column(Modifier.weight(1f)) { Text(item, fontWeight = FontWeight.Bold); Text(when (item) { "Material You" -> "Use Android wallpaper colours on Android 12+"; "Y2K Acid" -> "Acid lime, pink and electric blue"; "Cozy Lo-Fi" -> "Warm paper, clay and olive"; else -> "Thermal receipt paper and monospace details" }, style = MaterialTheme.typography.labelSmall) } } }
+            listOf("Pastel Pop", "Material You", "Y2K Acid", "Cozy Lo-Fi", "Receipt Paper").forEach { item -> Row(Modifier.fillMaxWidth().clickable { onVibe(item) }.padding(vertical = 7.dp), verticalAlignment = Alignment.CenterVertically) { Text(if (vibe == item) "●" else "○", Modifier.padding(end = 9.dp), color = MaterialTheme.colorScheme.primary); Column(Modifier.weight(1f)) { Text(item, fontWeight = FontWeight.Bold); Text(when (item) { "Material You" -> "Use Android wallpaper colours on Android 12+"; "Y2K Acid" -> "Acid lime, pink and electric blue"; "Cozy Lo-Fi" -> "Warm paper, clay and olive"; else -> "Thermal receipt paper and monospace details" }, style = MaterialTheme.typography.labelSmall) } } }
             Divider(Modifier.padding(vertical = 6.dp))
             Row(verticalAlignment = Alignment.CenterVertically) { Text("Dark appearance", Modifier.weight(1f), fontWeight = FontWeight.Bold); FilterChip(selected = dark, onClick = { onDark(!dark) }, label = { Text(if (dark) "Dark" else "Light") }) }
         }

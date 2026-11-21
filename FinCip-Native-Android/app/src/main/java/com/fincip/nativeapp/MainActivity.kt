@@ -26,6 +26,21 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.tween
+import androidx.compose.material.icons.filled.DarkMode
+import androidx.compose.material.icons.filled.LightMode
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.semantics.Role
+import com.fincip.nativeapp.ui.Pop
+import com.fincip.nativeapp.ui.PopChip
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -66,6 +81,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -158,7 +174,7 @@ private fun FinCipApp(store: FinanceStore, securePrefs: SecurePrefs) {
     val scope = rememberCoroutineScope()
     var workspace by remember { mutableStateOf(defaultWorkspace()) }
     var loading by remember { mutableStateOf(true) }
-    var vibe by remember { mutableStateOf(context.getSharedPreferences("fincip_ui", 0).getString("vibe", "Material You") ?: "Material You") }
+    var vibe by remember { mutableStateOf(context.getSharedPreferences("fincip_ui", 0).getString("vibe", "Pastel Pop") ?: "Pastel Pop") }
     var dark by remember { mutableStateOf(context.getSharedPreferences("fincip_ui", 0).getBoolean("dark", false)) }
     var page by remember { mutableStateOf("overview") }
     var group by remember { mutableStateOf("Home") }
@@ -273,7 +289,7 @@ private fun FinCipApp(store: FinanceStore, securePrefs: SecurePrefs) {
         taxAgeGroup = importedTax.string("ageGroup", "below60")
         taxResident = importedTax.bool("resident", true)
         val importedVibe = next.objectOrEmpty("settings").string("vibeTheme", "Material You")
-        if (importedVibe in listOf("Material You", "System", "Y2K Acid", "Cozy Lo-Fi", "Receipt Paper")) {
+        if (importedVibe in listOf("Pastel Pop", "Material You", "System", "Y2K Acid", "Cozy Lo-Fi", "Receipt Paper")) {
             vibe = if (importedVibe == "System") "Material You" else importedVibe
             context.getSharedPreferences("fincip_ui", 0).edit().putString("vibe", vibe).apply()
         }
@@ -443,7 +459,7 @@ private fun FinCipApp(store: FinanceStore, securePrefs: SecurePrefs) {
             "product" -> {
                 val invested = amount
                 val currentValue = formSaved.toDoubleOrNull() ?: 0.0
-                if (formName.isBlank() || invested < 0 || currentValue < 0 || invested + currentValue <= 0) return
+                if (formName.isBlank() || invested < 0 || currentValue < 0 || invested + currentValue <= 0) { notify("Add a name and an invested amount or current value (numbers only, no negatives)"); return }
                 val contributions = existingArrayForProduct(editId)
                 item.addProperty("name", formName.trim())
                 item.addProperty("kind", formCategory)
@@ -627,6 +643,14 @@ private fun FinCipApp(store: FinanceStore, securePrefs: SecurePrefs) {
     LaunchedEffect(Unit) { if (Build.VERSION.SDK_INT >= 33) notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS) }
 
     FinCipTheme(vibe, dark) {
+        val lightBars = MaterialTheme.colorScheme.background.luminance() > 0.5f
+        SideEffect {
+            (context as? Activity)?.window?.let { w ->
+                val controller = androidx.core.view.WindowCompat.getInsetsController(w, w.decorView)
+                controller.isAppearanceLightStatusBars = lightBars
+                controller.isAppearanceLightNavigationBars = lightBars
+            }
+        }
         if (loading) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("FinCip is opening your money space…", fontWeight = FontWeight.Bold) }
         } else {
@@ -636,41 +660,37 @@ private fun FinCipApp(store: FinanceStore, securePrefs: SecurePrefs) {
             val balance = incomeTotal(workspace) - expenseTotal(workspace)
             val savingsRate = if (monthIncome > 0) (monthIncome - monthExpenses) / monthIncome * 100 else 0.0
             Scaffold(
-                contentWindowInsets = WindowInsets.navigationBars,
+                containerColor = MaterialTheme.colorScheme.background,
+                contentWindowInsets = WindowInsets(0, 0, 0, 0),
                 topBar = {
-                    Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.background).padding(horizontal = 16.dp, vertical = 10.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                            Box(Modifier.size(42.dp).background(Color(0xFFFFD166), RoundedCornerShape(10.dp)).border(2.dp, Color.Black, RoundedCornerShape(10.dp)), contentAlignment = Alignment.Center) { Text("FC", color = Color.Black, fontWeight = FontWeight.Black, fontSize = 17.sp) }
-                            Column(Modifier.weight(1f)) {
-                                Text("FinCip", fontWeight = FontWeight.Black, fontSize = 20.sp)
-                                Text("PERSONAL FINANCE STUDIO", style = MaterialTheme.typography.labelSmall, letterSpacing = 1.sp)
-                            }
-                            MonthMenu(month) { month = it }
-                            IconButton(onClick = { runCatching { voiceLauncher.launch(Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM).putExtra(RecognizerIntent.EXTRA_PROMPT, "Describe your money move")) }.onFailure { notify("Voice input is not available on this device") } }) { Icon(Icons.Default.Mic, contentDescription = "Voice entry") }
-                            IconButton(onClick = { dark = !dark; context.getSharedPreferences("fincip_ui", 0).edit().putBoolean("dark", dark).apply() }) { Text(if (dark) "☀" else "☾", fontSize = 20.sp) }
-                            IconButton(onClick = { updateWorkspace { root -> val settings = root.objectOrEmpty("settings"); settings.addProperty("privacyMode", !settings.bool("privacyMode")); root.add("settings", settings) } }) { Icon(if (privacy) Icons.Default.VisibilityOff else Icons.Default.Visibility, contentDescription = "Toggle privacy") }
+                    Row(
+                        Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.background).statusBarsPadding().padding(horizontal = 16.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Box(Modifier.size(44.dp).background(Pop.Sun, CircleShape), contentAlignment = Alignment.Center) { Text("FC", color = Pop.Ink, fontWeight = FontWeight.Black, fontSize = 16.sp) }
+                        Column(Modifier.weight(1f).padding(start = 4.dp)) {
+                            Text("FinCip", fontWeight = FontWeight.Black, fontSize = 22.sp, letterSpacing = (-0.5).sp, maxLines = 1)
+                            Text(LocalDate.now().format(DateTimeFormatter.ofPattern("EEE, d MMM", Locale.ENGLISH)).uppercase(), style = MaterialTheme.typography.labelSmall, letterSpacing = 1.2.sp, color = MaterialTheme.colorScheme.onBackground.copy(alpha = .6f), maxLines = 1)
                         }
-                        Spacer(Modifier.height(9.dp))
-                        Divider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = .12f))
+                        val chipBg = MaterialTheme.colorScheme.surface
+                        IconButton(modifier = Modifier.size(42.dp).background(chipBg, CircleShape), onClick = { runCatching { voiceLauncher.launch(Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM).putExtra(RecognizerIntent.EXTRA_PROMPT, "Describe your money move")) }.onFailure { notify("Voice input is not available on this device") } }) { Icon(Icons.Default.Mic, contentDescription = "Voice entry", modifier = Modifier.size(20.dp)) }
+                        IconButton(modifier = Modifier.size(42.dp).background(chipBg, CircleShape), onClick = { updateWorkspace { root -> val settings = root.objectOrEmpty("settings"); settings.addProperty("privacyMode", !settings.bool("privacyMode")); root.add("settings", settings) } }) { Icon(if (privacy) Icons.Default.VisibilityOff else Icons.Default.Visibility, contentDescription = "Toggle privacy", modifier = Modifier.size(20.dp)) }
+                        IconButton(modifier = Modifier.size(42.dp).background(chipBg, CircleShape), onClick = { dark = !dark; context.getSharedPreferences("fincip_ui", 0).edit().putBoolean("dark", dark).apply() }) { Icon(if (dark) Icons.Default.LightMode else Icons.Default.DarkMode, contentDescription = "Toggle theme", modifier = Modifier.size(20.dp)) }
                     }
                 },
                 bottomBar = {
-                    NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
-                        listOf("Home", "Money", "Plan", "Explore").forEach { g ->
-                            val selected = group == g
-                            val icon = when (g) { "Home" -> Icons.Default.Home; "Money" -> Icons.Default.Wallet; "Plan" -> Icons.Default.Star; else -> Icons.Default.Explore }
-                            NavigationBarItem(selected = selected, onClick = { group = g; page = NAV_PAGES.first { it.group == g }.id }, icon = { Icon(icon, contentDescription = g) }, label = { Text(g) })
-                        }
-                    }
+                    PillNav(selected = group) { g -> group = g; page = NAV_PAGES.first { it.group == g }.id }
                 }
             ) { innerPadding ->
                 Column(Modifier.fillMaxSize().padding(innerPadding)) {
-                    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+                    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        MonthMenu(month) { month = it }
                         NAV_PAGES.filter { it.group == group }.forEach { item ->
-                            FilterChip(selected = page == item.id, onClick = { page = item.id }, label = { Text("${item.glyph}  ${item.title}", maxLines = 1) })
+                            PopChip(text = item.title, selected = page == item.id, onClick = { page = item.id })
                         }
                     }
-                    when (page) {
+                    Crossfade(targetState = page, animationSpec = tween(180), label = "page") { currentPage ->
+                    when (currentPage) {
                         "overview" -> OverviewScreen(workspace, month, privacy, savingsRate, balance, onAdd = { openForm("transaction") }, onMascot = { group = "Explore"; page = "settings" })
                         "transactions" -> TransactionsScreen(workspace, month, privacy, transactionQuery, { transactionQuery = it }, { openForm("transaction") }, { openForm("transaction", it) }, { deleteFromArray("transactions", it.string("id")) }, { statementLauncher.launch(arrayOf("text/*", "application/octet-stream")) }, { exportCsvLauncher.launch("FinCip-transactions.csv") })
                         "recurring" -> RecurringScreen(workspace, privacy, { openForm("bill") }, { deleteFromArray("recurringRules", it.string("id")) }, { markRecurringPaid(it) })
@@ -805,6 +825,7 @@ private fun FinCipApp(store: FinanceStore, securePrefs: SecurePrefs) {
                         )
                         else -> OverviewScreen(workspace, month, privacy, savingsRate, balance, onAdd = { openForm("transaction") }, onMascot = { group = "Explore"; page = "settings" })
                     }
+                    }
                 }
             }
         }
@@ -911,7 +932,7 @@ private fun MonthMenu(month: String, onSelect: (String) -> Unit) {
     var expanded by remember { mutableStateOf(false) }
     val selected = runCatching { YearMonth.parse(month) }.getOrElse { YearMonth.now() }
     Box {
-        OutlinedButton(onClick = { expanded = true }, shape = RoundedCornerShape(10.dp), border = BorderStroke(2.dp, Color.Black)) {
+        OutlinedButton(onClick = { expanded = true }, shape = RoundedCornerShape(50), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline), colors = androidx.compose.material3.ButtonDefaults.outlinedButtonColors(containerColor = Pop.Sun, contentColor = Pop.Ink), contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 14.dp, vertical = 6.dp)) {
             Icon(Icons.Default.CalendarMonth, contentDescription = null, modifier = Modifier.size(17.dp)); Spacer(Modifier.width(7.dp))
             Text(selected.format(DateTimeFormatter.ofPattern("MMM yyyy", Locale.ENGLISH)), fontWeight = FontWeight.Bold)
         }
@@ -990,7 +1011,7 @@ private fun FinanceEntryDialog(
             if (type == "productContribution") Text("This adds to invested amount and current value. Update the current value after your next statement.", style = MaterialTheme.typography.bodySmall)
             if (type == "emergency") Text("Keep this reserve separate from your ordinary savings goals.", style = MaterialTheme.typography.bodySmall)
         }
-    }, confirmButton = { TextButton(onClick = onSave) { Text("Save") } }, dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } })
+    }, confirmButton = { NeoButton("Save", onClick = onSave) }, dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } })
 }
 
 private fun parseQuickEntry(text: String, currency: String): JsonObject? {
@@ -1133,4 +1154,36 @@ private fun writePdfReport(context: android.content.Context, uri: Uri, workspace
     doc.finishPage(page)
     context.contentResolver.openOutputStream(uri)?.use { doc.writeTo(it) }
     doc.close()
+}
+
+
+/** Floating dark pill navigation. The active tab expands into a sun-yellow capsule with its label. */
+@Composable
+private fun PillNav(selected: String, onSelect: (String) -> Unit) {
+    val items = listOf("Home" to Icons.Default.Home, "Money" to Icons.Default.Wallet, "Plan" to Icons.Default.Star, "Explore" to Icons.Default.Explore)
+    val isDark = MaterialTheme.colorScheme.background.luminance() < 0.3f
+    val pillColor = if (isDark) Color(0xFF110E26) else Pop.Ink
+    val pill = RoundedCornerShape(50)
+    Box(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 16.dp, vertical = 10.dp)) {
+        Row(
+            Modifier.fillMaxWidth().shadow(12.dp, pill).background(pillColor, pill).padding(6.dp),
+            horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically
+        ) {
+            items.forEach { (name, icon) ->
+                val active = name == selected
+                val bg by animateColorAsState(if (active) Pop.Sun else Color.Transparent, tween(200), label = "navBg")
+                val fg by animateColorAsState(if (active) Pop.Ink else Pop.Cream.copy(alpha = .75f), tween(200), label = "navFg")
+                Row(
+                    Modifier.clip(pill).background(bg).clickable(role = Role.Tab) { onSelect(name) }.animateContentSize().padding(horizontal = if (active) 16.dp else 13.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(icon, contentDescription = name, tint = fg, modifier = Modifier.size(22.dp))
+                    if (active) {
+                        Spacer(Modifier.width(7.dp))
+                        Text(name, color = fg, fontWeight = FontWeight.Black, style = MaterialTheme.typography.labelLarge, maxLines = 1)
+                    }
+                }
+            }
+        }
+    }
 }

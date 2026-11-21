@@ -1,11 +1,12 @@
 <resources>
     <style name="Theme.FinCip" parent="android:style/Theme.Material.Light.NoActionBar">
         <item name="android:fontFamily">sans</item>
-        <item name="android:colorAccent">#516E58</item>
-        <item name="android:statusBarColor">#F4F0E7</item>
-        <item name="android:navigationBarColor">#F4F0E7</item>
+        <item name="android:colorAccent">#1E1B2E</item>
+        <item name="android:statusBarColor">#FFF8E1</item>
+        <item name="android:navigationBarColor">#FFF8E1</item>
         <item name="android:windowLightStatusBar">true</item>
         <item name="android:windowActionModeOverlay">true</item>
+        <item name="android:windowBackground">#FFF8E1</item>
         <item name="android:windowLightNavigationBar">true</item>
     </style>
 </resources>
