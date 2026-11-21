@@ -22,7 +22,7 @@ class FinanceStore(context: Context) : SQLiteOpenHelper(context, "fincip-private
         val cipherText = LocalKeyVault.encrypt(plainJson)
         writableDatabase.execSQL(
             "INSERT OR REPLACE INTO workspace(id, payload, updated_at) VALUES(1, ?, ?)",
-            arrayOf(cipherText, System.currentTimeMillis())
+            arrayOf<Any>(cipherText, System.currentTimeMillis())
         )
     }
 
