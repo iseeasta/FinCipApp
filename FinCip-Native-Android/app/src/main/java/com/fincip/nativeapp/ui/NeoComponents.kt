@@ -247,3 +247,28 @@ fun MiniBars(
         }
     }
 }
+
+
+/** Drop-in themed replacement for OutlinedTextField (rounded, filled, ink focus border). */
+@Composable
+fun PopField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    modifier: Modifier = Modifier,
+    label: (@Composable () -> Unit)? = null,
+    placeholder: (@Composable () -> Unit)? = null,
+    singleLine: Boolean = false,
+    enabled: Boolean = true
+) {
+    OutlinedTextField(
+        value = value, onValueChange = onValueChange, modifier = modifier, enabled = enabled,
+        label = label, placeholder = placeholder, singleLine = singleLine,
+        shape = RoundedCornerShape(Pop.RadiusSmall),
+        colors = OutlinedTextFieldDefaults.colors(
+            focusedContainerColor = MaterialTheme.colorScheme.surface,
+            unfocusedContainerColor = MaterialTheme.colorScheme.surface,
+            focusedBorderColor = MaterialTheme.colorScheme.onSurface,
+            unfocusedBorderColor = MaterialTheme.colorScheme.outline
+        )
+    )
+}

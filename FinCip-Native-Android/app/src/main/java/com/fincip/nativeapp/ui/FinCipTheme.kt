@@ -14,9 +14,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.fincip.nativeapp.R
 import androidx.compose.ui.unit.sp
 
 
@@ -37,6 +39,16 @@ object Pop {
     val Radius = 28.dp
     val RadiusSmall = 18.dp
 }
+
+/** Bundled Plus Jakarta Sans: friendly geometric sans used across the whole app. */
+val PopFont = FontFamily(
+    Font(R.font.jakarta_regular, FontWeight.Normal),
+    Font(R.font.jakarta_medium, FontWeight.Medium),
+    Font(R.font.jakarta_bold, FontWeight.SemiBold),
+    Font(R.font.jakarta_bold, FontWeight.Bold),
+    Font(R.font.jakarta_extrabold, FontWeight.ExtraBold),
+    Font(R.font.jakarta_extrabold, FontWeight.Black)
+)
 
 /** Readable text colour for any block colour, in light and dark mode. */
 fun contentOn(bg: Color): Color = if (bg.luminance() > 0.42f) Pop.Ink else Pop.Cream
@@ -106,8 +118,12 @@ fun FinCipTheme(vibe: String, dark: Boolean, content: @Composable () -> Unit) {
     }
 
     val typo = Typography().let { base ->
-        val family = if (vibe == "Receipt Paper") FontFamily.Monospace else FontFamily.SansSerif
+        val family = if (vibe == "Receipt Paper") FontFamily.Monospace else PopFont
         base.copy(
+            displayLarge = base.displayLarge.copy(fontFamily = family), displayMedium = base.displayMedium.copy(fontFamily = family), displaySmall = base.displaySmall.copy(fontFamily = family),
+            headlineSmall = base.headlineSmall.copy(fontFamily = family, fontWeight = FontWeight.ExtraBold),
+            titleSmall = base.titleSmall.copy(fontFamily = family, fontWeight = FontWeight.Bold),
+            bodySmall = base.bodySmall.copy(fontFamily = family), labelMedium = base.labelMedium.copy(fontFamily = family), labelSmall = base.labelSmall.copy(fontFamily = family),
             headlineLarge = base.headlineLarge.copy(fontFamily = family, fontWeight = FontWeight.Black, fontSize = 34.sp, lineHeight = 38.sp, letterSpacing = (-0.8).sp),
             headlineMedium = base.headlineMedium.copy(fontFamily = family, fontWeight = FontWeight.ExtraBold, fontSize = 27.sp, lineHeight = 31.sp, letterSpacing = (-0.5).sp),
             titleLarge = base.titleLarge.copy(fontFamily = family, fontWeight = FontWeight.ExtraBold),

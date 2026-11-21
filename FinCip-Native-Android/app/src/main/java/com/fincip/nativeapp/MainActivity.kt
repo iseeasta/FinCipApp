@@ -40,6 +40,7 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.semantics.Role
 import com.fincip.nativeapp.ui.Pop
+import com.fincip.nativeapp.ui.PopField
 import com.fincip.nativeapp.ui.PopChip
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -174,7 +175,12 @@ private fun FinCipApp(store: FinanceStore, securePrefs: SecurePrefs) {
     val scope = rememberCoroutineScope()
     var workspace by remember { mutableStateOf(defaultWorkspace()) }
     var loading by remember { mutableStateOf(true) }
-    var vibe by remember { mutableStateOf(context.getSharedPreferences("fincip_ui", 0).getString("vibe", "Pastel Pop") ?: "Pastel Pop") }
+    var vibe by remember {
+        val sp = context.getSharedPreferences("fincip_ui", 0)
+        // One-time switch so existing installs land on the new look; the user can still change it in Settings.
+        if (!sp.getBoolean("pop_v1", false)) { sp.edit().putString("vibe", "Pastel Pop").putBoolean("pop_v1", true).apply() }
+        mutableStateOf(sp.getString("vibe", "Pastel Pop") ?: "Pastel Pop")
+    }
     var dark by remember { mutableStateOf(context.getSharedPreferences("fincip_ui", 0).getBoolean("dark", false)) }
     var page by remember { mutableStateOf("overview") }
     var group by remember { mutableStateOf("Home") }
@@ -905,7 +911,7 @@ private fun FinCipApp(store: FinanceStore, securePrefs: SecurePrefs) {
     if (quickVoiceDialog) {
         AlertDialog(onDismissRequest = { quickVoiceDialog = false }, title = { Text("Quick voice entry") }, text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(value = quickEntryText, onValueChange = { quickEntryText = it }, modifier = Modifier.fillMaxWidth(), label = { Text("What happened?") })
+                PopField(value = quickEntryText, onValueChange = { quickEntryText = it }, modifier = Modifier.fillMaxWidth(), label = { Text("What happened?") })
                 Text("Example: spent 250 on lunch · received 12000 salary", style = MaterialTheme.typography.bodySmall)
             }
         }, confirmButton = { TextButton(onClick = {
@@ -946,7 +952,7 @@ private fun MonthMenu(month: String, onSelect: (String) -> Unit) {
 @Composable
 private fun PasswordDialog(title: String, value: String, onChange: (String) -> Unit, onDismiss: () -> Unit, onConfirm: () -> Unit) {
     AlertDialog(onDismissRequest = onDismiss, title = { Text(title, fontWeight = FontWeight.Black) }, text = {
-        OutlinedTextField(value = value, onValueChange = onChange, label = { Text("Password") }, modifier = Modifier.fillMaxWidth())
+        PopField(value = value, onValueChange = onChange, label = { Text("Password") }, modifier = Modifier.fillMaxWidth())
     }, confirmButton = { TextButton(onClick = onConfirm, enabled = value.length >= 8) { Text("Continue") } }, dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } })
 }
 
@@ -965,7 +971,7 @@ private fun FinanceEntryDialog(
     val title = when (type) { "transaction" -> "Add transaction"; "budget" -> "Set budget"; "goal" -> "Create goal"; "contribution" -> "Add contribution"; "bill" -> "Add recurring bill"; "investment" -> "Add portfolio holding"; "asset" -> "Add net-worth item"; "product" -> "Add finance product"; "productContribution" -> "Record investment contribution"; "emergency" -> "Emergency fund settings"; "rule" -> "Add smart rule"; else -> "FinCip entry" }
     AlertDialog(onDismissRequest = onDismiss, title = { Text(title, fontWeight = FontWeight.Black) }, text = {
         Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            if (type != "contribution" && type != "productContribution" && type != "emergency") OutlinedTextField(value = name, onValueChange = onName, label = { Text(if (type == "rule") "Keyword" else "Name / description") }, modifier = Modifier.fillMaxWidth())
+            if (type != "contribution" && type != "productContribution" && type != "emergency") PopField(value = name, onValueChange = onName, label = { Text(if (type == "rule") "Keyword" else "Name / description") }, modifier = Modifier.fillMaxWidth())
             if (type == "transaction") {
                 Selector("Type", transactionType, listOf("expense", "income"), onTransactionType)
                 Selector("Category", category, listOf("Food", "Transport", "Shopping", "Bills", "Health", "Education", "Entertainment", "Travel", "Home", "Subscriptions", "Personal care", "EMI", "Salary", "Freelance", "Business", "Investment", "Gift", "Refund", "Other"), onCategory)
@@ -976,36 +982,36 @@ private fun FinanceEntryDialog(
             if (type == "goal") Selector("Goal type", transactionType, listOf("savings", "debt"), onTransactionType)
             if (type == "bill") Selector("Frequency", frequency, listOf("weekly", "monthly", "yearly"), onFrequency)
             if (type == "contribution" || type == "productContribution" || type == "emergency" || type == "transaction" || type == "budget" || type == "goal" || type == "bill" || type == "investment" || type == "asset" || type == "product") {
-                OutlinedTextField(value = amount, onValueChange = onAmount, label = { Text(when (type) { "contribution", "productContribution" -> "Contribution amount"; "emergency" -> "Emergency fund balance"; "product" -> "Invested to date"; else -> "Amount / value" }) }, modifier = Modifier.fillMaxWidth())
+                PopField(value = amount, onValueChange = onAmount, label = { Text(when (type) { "contribution", "productContribution" -> "Contribution amount"; "emergency" -> "Emergency fund balance"; "product" -> "Invested to date"; else -> "Amount / value" }) }, modifier = Modifier.fillMaxWidth())
                 Selector("Currency", currency, CURRENCY_INFO.map { it.code }, onCurrency)
             }
-            if (type == "transaction" || type == "bill" || type == "product") OutlinedTextField(value = date, onValueChange = onDate, label = { Text(when (type) { "bill" -> "Next due date · YYYY-MM-DD"; "product" -> "Start date · YYYY-MM-DD"; else -> "Date · YYYY-MM-DD" }) }, modifier = Modifier.fillMaxWidth())
+            if (type == "transaction" || type == "bill" || type == "product") PopField(value = date, onValueChange = onDate, label = { Text(when (type) { "bill" -> "Next due date · YYYY-MM-DD"; "product" -> "Start date · YYYY-MM-DD"; else -> "Date · YYYY-MM-DD" }) }, modifier = Modifier.fillMaxWidth())
             if (type == "product") {
-                OutlinedTextField(value = person, onValueChange = onPerson, label = { Text("Provider / institution") }, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(value = saved, onValueChange = onSaved, label = { Text("Current value") }, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(value = contribution, onValueChange = onContribution, label = { Text("Monthly contribution") }, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(value = rate, onValueChange = onRate, label = { Text("Rate (% p.a.)") }, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(value = deadline, onValueChange = onDeadline, label = { Text("Maturity date · optional") }, modifier = Modifier.fillMaxWidth())
+                PopField(value = person, onValueChange = onPerson, label = { Text("Provider / institution") }, modifier = Modifier.fillMaxWidth())
+                PopField(value = saved, onValueChange = onSaved, label = { Text("Current value") }, modifier = Modifier.fillMaxWidth())
+                PopField(value = contribution, onValueChange = onContribution, label = { Text("Monthly contribution") }, modifier = Modifier.fillMaxWidth())
+                PopField(value = rate, onValueChange = onRate, label = { Text("Rate (% p.a.)") }, modifier = Modifier.fillMaxWidth())
+                PopField(value = deadline, onValueChange = onDeadline, label = { Text("Maturity date · optional") }, modifier = Modifier.fillMaxWidth())
             }
-            if (type == "emergency") OutlinedTextField(value = target, onValueChange = onTarget, label = { Text("Target months of expenses") }, modifier = Modifier.fillMaxWidth())
+            if (type == "emergency") PopField(value = target, onValueChange = onTarget, label = { Text("Target months of expenses") }, modifier = Modifier.fillMaxWidth())
             if (type == "transaction") {
-                OutlinedTextField(value = account, onValueChange = onAccount, label = { Text("Payment account") }, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(value = tags, onValueChange = onTags, label = { Text("Tags · comma separated") }, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(value = person, onValueChange = onPerson, label = { Text("Person / payee") }, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(value = project, onValueChange = onProject, label = { Text("Project") }, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(value = extra, onValueChange = onExtra, label = { Text("Split allocations · optional") }, placeholder = { Text("Food:250, Travel:100") }, modifier = Modifier.fillMaxWidth())
+                PopField(value = account, onValueChange = onAccount, label = { Text("Payment account") }, modifier = Modifier.fillMaxWidth())
+                PopField(value = tags, onValueChange = onTags, label = { Text("Tags · comma separated") }, modifier = Modifier.fillMaxWidth())
+                PopField(value = person, onValueChange = onPerson, label = { Text("Person / payee") }, modifier = Modifier.fillMaxWidth())
+                PopField(value = project, onValueChange = onProject, label = { Text("Project") }, modifier = Modifier.fillMaxWidth())
+                PopField(value = extra, onValueChange = onExtra, label = { Text("Split allocations · optional") }, placeholder = { Text("Food:250, Travel:100") }, modifier = Modifier.fillMaxWidth())
                 Row(verticalAlignment = Alignment.CenterVertically) { Text("Include in shared budget pack", Modifier.weight(1f), style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold); FilterChip(selected = shared, onClick = { onShared(!shared) }, label = { Text(if (shared) "Shared" else "Personal") }) }
             }
             if (type == "goal") {
-                OutlinedTextField(value = target, onValueChange = onTarget, label = { Text("Target amount") }, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(value = saved, onValueChange = onSaved, label = { Text("Already saved / repaid") }, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(value = contribution, onValueChange = onContribution, label = { Text("Monthly contribution") }, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(value = deadline, onValueChange = onDeadline, label = { Text("Target date · YYYY-MM-DD") }, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(value = rate, onValueChange = onRate, label = { Text("Debt interest % p.a.") }, modifier = Modifier.fillMaxWidth())
+                PopField(value = target, onValueChange = onTarget, label = { Text("Target amount") }, modifier = Modifier.fillMaxWidth())
+                PopField(value = saved, onValueChange = onSaved, label = { Text("Already saved / repaid") }, modifier = Modifier.fillMaxWidth())
+                PopField(value = contribution, onValueChange = onContribution, label = { Text("Monthly contribution") }, modifier = Modifier.fillMaxWidth())
+                PopField(value = deadline, onValueChange = onDeadline, label = { Text("Target date · YYYY-MM-DD") }, modifier = Modifier.fillMaxWidth())
+                PopField(value = rate, onValueChange = onRate, label = { Text("Debt interest % p.a.") }, modifier = Modifier.fillMaxWidth())
             }
             if (type == "investment") {
-                OutlinedTextField(value = target, onValueChange = onTarget, label = { Text("Units") }, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(value = saved, onValueChange = onSaved, label = { Text("Current unit price") }, modifier = Modifier.fillMaxWidth())
+                PopField(value = target, onValueChange = onTarget, label = { Text("Units") }, modifier = Modifier.fillMaxWidth())
+                PopField(value = saved, onValueChange = onSaved, label = { Text("Current unit price") }, modifier = Modifier.fillMaxWidth())
             }
             if (type == "contribution") Text("This amount is added to the selected goal or debt balance.", style = MaterialTheme.typography.bodySmall)
             if (type == "productContribution") Text("This adds to invested amount and current value. Update the current value after your next statement.", style = MaterialTheme.typography.bodySmall)

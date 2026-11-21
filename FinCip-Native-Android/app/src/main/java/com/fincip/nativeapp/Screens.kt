@@ -45,6 +45,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -69,6 +71,7 @@ import com.fincip.nativeapp.data.transactions
 import com.fincip.nativeapp.ui.Field
 import com.fincip.nativeapp.ui.MiniBars
 import com.fincip.nativeapp.ui.Pop
+import com.fincip.nativeapp.ui.PopField
 import com.fincip.nativeapp.ui.PopChip
 import com.fincip.nativeapp.ui.contentOn
 import com.fincip.nativeapp.data.parseMonth
@@ -99,9 +102,29 @@ private fun PageColumn(content: @Composable ColumnScope.() -> Unit) {
     Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(14.dp), content = content)
 }
 
+private val heroPalette = listOf(Pop.Lavender, Pop.Peach, Pop.Mint, Pop.Sun, Color(0xFFB8E3F2), Color(0xFFF9C6D0), Color(0xFFD9F0A3), Pop.Coral)
+
+/** Big colour-blocked page header with geometric shapes. Colour is stable per page (derived from the eyebrow). */
 @Composable
 private fun PageHeading(eyebrow: String, title: String, description: String = "") {
-    NeoTitle(eyebrow, title, description)
+    val fill = heroPalette[(eyebrow.hashCode() and 0x7fffffff) % heroPalette.size]
+    val fg = contentOn(fill)
+    Box(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(32.dp)).background(fill).drawBehind {
+            drawCircle(Color.White.copy(alpha = .30f), radius = size.minDimension * .62f, center = Offset(size.width, 0f))
+            drawCircle(Color.Black.copy(alpha = .07f), radius = size.minDimension * .30f, center = Offset(size.width * .88f, size.height))
+            drawCircle(Color.White.copy(alpha = .45f), radius = 12.dp.toPx(), center = Offset(size.width * .70f, size.height * .22f))
+        }.padding(22.dp)
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text(
+                eyebrow.uppercase(), style = MaterialTheme.typography.labelSmall, letterSpacing = 1.4.sp, fontWeight = FontWeight.Black, color = Pop.Ink,
+                modifier = Modifier.clip(RoundedCornerShape(50)).background(Color.White.copy(alpha = .55f)).padding(horizontal = 11.dp, vertical = 5.dp)
+            )
+            Text(title, style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Black, color = fg)
+            if (description.isNotBlank()) Text(description, style = MaterialTheme.typography.bodyMedium, color = fg.copy(alpha = .82f), modifier = Modifier.fillMaxWidth(.88f))
+        }
+    }
 }
 
 @Composable
@@ -128,7 +151,7 @@ fun OverviewScreen(workspace: JsonObject, month: String, privacy: Boolean, savin
     val mascotEmoji = when { ramen -> "🍜"; achievedGoal -> "🥳"; savingMood -> when (pet.string("kind", "🐱")) { "🌱" -> "🌳"; "🤖" -> "🤖✨"; "🦊" -> "🦊💛"; else -> "😸" }; expenses > income && income > 0 -> "😵"; else -> pet.string("kind", "🐱") }
     val mood = when { ramen -> "Ramen mode · takeout has crossed the food budget"; achievedGoal -> "Goal unlocked · you reached a savings milestone"; savingMood -> "Thriving · consistent contributions are helping future-you"; expenses > income && income > 0 -> "A little stressed · spending is ahead of income"; else -> "Taking it one transaction at a time" }
     PageColumn {
-        PageHeading("YOUR FINANCIAL SPACE", "Make room for what matters.", "A native, local-first money companion. Your data stays on this device unless you enable sync.")
+        NeoTitle("YOUR FINANCIAL SPACE", "Make room for what matters.", "A native, local-first money companion. Your data stays on this device unless you enable sync.")
         val metricDefinitions = listOf(
             "balance" to Triple("Total balance", if (privacy) "••••••" else money(balance, base), "Across all recorded activity"),
             "income" to Triple("Income · $month", if (privacy) "••••" else money(income, base), "Money received"),
@@ -226,7 +249,7 @@ fun TransactionsScreen(workspace: JsonObject, month: String, privacy: Boolean, q
     PageColumn {
         PageHeading("EVERY RUPEE, ACCOUNTED FOR", "Keep the details clear.", "Search, import and manage transactions. Bank statements can be CSV or OFX.")
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { NeoButton("+ Add transaction", Modifier.weight(1f), onAdd); NeoOutlineButton("Import statement", onImport, Modifier.weight(1f)) }
-        OutlinedTextField(value = query, onValueChange = onQuery, modifier = Modifier.fillMaxWidth(), label = { Text("Search transaction, person or project") })
+        PopField(value = query, onValueChange = onQuery, modifier = Modifier.fillMaxWidth(), label = { Text("Search transaction, person or project") })
         Row(verticalAlignment = Alignment.CenterVertically) { Text("${filtered.size} transactions · $month", Modifier.weight(1f), style = MaterialTheme.typography.labelMedium); InlineAction("Export CSV ↓", onExport) }
         if (filtered.isEmpty()) NeoCard { Text("No transactions for this month", fontWeight = FontWeight.Black); Text("Add an entry or import a bank statement.", style = MaterialTheme.typography.bodySmall) }
         filtered.sortedByDescending { it.string("date") }.forEach { item -> TransactionCard(item, privacy, { onEdit(item) }, { onDelete(item) }) }
@@ -384,7 +407,7 @@ fun CurrencyScreen(workspace: JsonObject, update: ((JsonObject) -> Unit) -> Unit
         PageHeading("GLOBAL MONEY", "Convert across borders.", "Ten currencies supported. Rates are editable reference assumptions, not live quotes.")
         NeoCard {
             Text("AMOUNT", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Black)
-            OutlinedTextField(value = amount, onValueChange = { amount = it }, modifier = Modifier.fillMaxWidth(), label = { Text("Amount") })
+            PopField(value = amount, onValueChange = { amount = it }, modifier = Modifier.fillMaxWidth(), label = { Text("Amount") })
             Selector("From", from, CURRENCY_INFO.map { "${it.flag} ${it.code}" }, { from = it.takeLast(3) })
             OutlinedButton(onClick = { val temp = from; from = to; to = temp }, modifier = Modifier.fillMaxWidth()) { Text("⇅  Swap currencies") }
             Selector("To", to, CURRENCY_INFO.map { "${it.flag} ${it.code}" }, { to = it.takeLast(3) })
@@ -406,7 +429,7 @@ fun CurrencyScreen(workspace: JsonObject, update: ((JsonObject) -> Unit) -> Unit
                 var text by remember(info.code, rate) { mutableStateOf(if (rate > 0) rate.toString() else "") }
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Column(Modifier.weight(1f)) { Text("${info.flag} ${info.code}", fontWeight = FontWeight.Bold); Text(info.country, style = MaterialTheme.typography.labelSmall) }
-                    OutlinedTextField(value = text, onValueChange = { text = it }, modifier = Modifier.width(140.dp), singleLine = true, label = { Text("INR for 1 unit") }, enabled = info.code != "INR")
+                    PopField(value = text, onValueChange = { text = it }, modifier = Modifier.width(140.dp), singleLine = true, label = { Text("INR for 1 unit") }, enabled = info.code != "INR")
                     TextButtonTiny("Save") {
                         val v = text.toDoubleOrNull() ?: return@TextButtonTiny
                         update { root -> val s = root.objectOrEmpty("settings"); val fx = s.objectOrEmpty("fxRates"); fx.addProperty(info.code, if (info.code == "INR") 1.0 else v); s.add("fxRates", fx); root.add("settings", s) }
@@ -628,7 +651,7 @@ fun IndiaFinanceScreen(workspace: JsonObject, privacy: Boolean, onAdd: () -> Uni
     val gainFg = if (gainTotal >= 0) GainDark else LossDark
 
     PageColumn {
-        PageHeading("INDIA / WEALTH TRACKER", "Your long-term money, under control.", "SIPs, mutual funds, EPF, PPF, NPS, deposits and gold in one place. Values are entered by you.")
+        NeoTitle("INDIA / WEALTH TRACKER", "Your long-term money, under control.", "SIPs, mutual funds, EPF, PPF, NPS, deposits and gold in one place. Values are entered by you.")
 
         NeoCard(fill = Pop.Lavender) {
             Text("PORTFOLIO VALUE", style = MaterialTheme.typography.labelSmall, letterSpacing = 1.4.sp, fontWeight = FontWeight.Black, color = Pop.Ink.copy(alpha = .7f))
