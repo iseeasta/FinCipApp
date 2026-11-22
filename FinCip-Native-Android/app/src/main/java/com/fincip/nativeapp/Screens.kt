@@ -46,6 +46,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
@@ -70,6 +71,8 @@ import com.fincip.nativeapp.data.string
 import com.fincip.nativeapp.data.toBase
 import com.fincip.nativeapp.data.transactions
 import com.fincip.nativeapp.ui.Field
+import com.fincip.nativeapp.ui.ProfileAvatar
+import com.fincip.nativeapp.ui.ProfileData
 import com.fincip.nativeapp.ui.MiniBars
 import com.fincip.nativeapp.ui.PetBlob
 import com.fincip.nativeapp.ui.PetMood
@@ -1292,5 +1295,49 @@ fun HouseholdScreen(
         } else {
             Text("Run the Supabase SQL file included in this Android project before connecting. This native client uses Auth and row-level-security policies from that schema.", style = MaterialTheme.typography.bodySmall)
         }
+    }
+}
+
+
+fun profileOf(workspace: JsonObject): ProfileData {
+    val p = workspace.objectOrEmpty("profile")
+    return ProfileData(p.string("name"), p.string("handle"), p.string("tagline"), p.double("avatarSeed").toLong())
+}
+
+@Composable
+fun ProfileScreen(workspace: JsonObject, onEdit: () -> Unit, onBackup: () -> Unit) {
+    val profile = profileOf(workspace)
+    val txs = transactions(workspace)
+    val xp = txs.size * 10 + workspace.arrayOrEmpty("budgets").size() * 25 + workspace.arrayOrEmpty("goals").size() * 25 + workspace.arrayOrEmpty("financeProducts").size() * 25
+    val streak = entryStreak(workspace)
+    Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        NeoCard {
+            Box(Modifier.fillMaxWidth()) {
+                Box(Modifier.fillMaxWidth().height(110.dp).clip(RoundedCornerShape(20.dp)).background(Brush.linearGradient(listOf(Pop.Lavender, Pop.Coral, Pop.Sun))))
+                Box(Modifier.padding(top = 70.dp).align(Alignment.TopCenter).background(MaterialTheme.colorScheme.surface, CircleShape).padding(5.dp)) {
+                    ProfileAvatar(profile.seed, size = 84.dp)
+                }
+            }
+            Spacer(Modifier.height(48.dp))
+            Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(profile.name, fontWeight = FontWeight.Black, fontSize = 24.sp)
+                if (profile.handle.isNotBlank()) Text("@" + profile.handle, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .6f))
+                if (profile.tagline.isNotBlank()) Text(profile.tagline, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+            }
+            Spacer(Modifier.height(14.dp))
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                NeoButton("Edit profile", Modifier.weight(1f), onEdit)
+            }
+            Spacer(Modifier.height(14.dp))
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+                listOf("Entries" to txs.size.toString(), "Streak" to "${streak}d", "Level" to (xp / 100 + 1).toString()).forEach { (k, v) ->
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(v, fontWeight = FontWeight.Black, fontSize = 22.sp)
+                        Text(k.uppercase(), style = MaterialTheme.typography.labelSmall, letterSpacing = 1.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .6f))
+                    }
+                }
+            }
+        }
+        NeoButton("Backup & privacy", Modifier.fillMaxWidth(), onBackup)
     }
 }

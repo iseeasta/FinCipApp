@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
@@ -44,8 +45,10 @@ import com.fincip.nativeapp.ui.Pop
 import com.fincip.nativeapp.ui.FinCipInk
 import com.fincip.nativeapp.ui.FinCipMark
 import com.fincip.nativeapp.ui.FinCipSidebar
-import com.fincip.nativeapp.ui.SidebarCollapsedWidth
-import com.fincip.nativeapp.ui.SidebarExpandedWidth
+import com.fincip.nativeapp.ui.SidebarWidth
+import com.fincip.nativeapp.ui.ProfileData
+import com.fincip.nativeapp.ui.ProfileForm
+import com.fincip.nativeapp.ui.OnboardingScreen
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateDpAsState
@@ -199,6 +202,7 @@ private fun FinCipApp(store: FinanceStore, securePrefs: SecurePrefs) {
     var page by remember { mutableStateOf("overview") }
     var group by remember { mutableStateOf("Home") }
     var sidebarExpanded by remember { mutableStateOf(context.resources.configuration.screenWidthDp >= 600 && context.getSharedPreferences("fincip_ui", 0).getBoolean("sidebar_expanded", true)) }
+    var editingProfile by remember { mutableStateOf(false) }
     var month by remember { mutableStateOf(currentMonth()) }
     var showEntry by remember { mutableStateOf(false) }
     var showBackupPassword by remember { mutableStateOf(false) }
@@ -660,6 +664,10 @@ private fun FinCipApp(store: FinanceStore, securePrefs: SecurePrefs) {
             quickEntryText = words; quickVoiceDialog = true
         }
     }
+    fun saveProfile(d: ProfileData) {
+        updateWorkspace { root -> root.add("profile", JsonObject().apply { addProperty("name", d.name); addProperty("handle", d.handle); addProperty("tagline", d.tagline); addProperty("avatarSeed", d.seed) }) }
+    }
+    fun startVoice() { runCatching { voiceLauncher.launch(Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM).putExtra(RecognizerIntent.EXTRA_PROMPT, "Describe your money move")) }.onFailure { notify("Voice input is not available on this device") } }
     val notificationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
     LaunchedEffect(Unit) { if (Build.VERSION.SDK_INT >= 33) notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS) }
 
@@ -680,6 +688,8 @@ private fun FinCipApp(store: FinanceStore, securePrefs: SecurePrefs) {
                     Text("OPENING YOUR MONEY SPACE", color = Color(0xFFF3F0E7).copy(alpha = .55f), style = MaterialTheme.typography.labelSmall, letterSpacing = 1.6.sp)
                 }
             }
+        } else if (workspace.objectOrEmpty("profile").string("name").isBlank()) {
+            OnboardingScreen { saveProfile(it) }
         } else {
             val privacy = workspace.objectOrEmpty("settings").bool("privacyMode")
             val monthIncome = incomeTotal(workspace, month)
@@ -687,11 +697,13 @@ private fun FinCipApp(store: FinanceStore, securePrefs: SecurePrefs) {
             val balance = incomeTotal(workspace) - expenseTotal(workspace)
             val savingsRate = if (monthIncome > 0) (monthIncome - monthExpenses) / monthIncome * 100 else 0.0
             val wide = LocalConfiguration.current.screenWidthDp >= 600
-            val sidebarW by animateDpAsState(if (sidebarExpanded) SidebarExpandedWidth else SidebarCollapsedWidth, tween(260, easing = FastOutSlowInEasing), label = "sidebarWidth")
+            val pushW by animateDpAsState(if (wide && sidebarExpanded) SidebarWidth else 0.dp, tween(260, easing = FastOutSlowInEasing), label = "pushW")
+            val sidebarX by animateDpAsState(if (sidebarExpanded) 0.dp else -SidebarWidth - 24.dp, tween(260, easing = FastOutSlowInEasing), label = "sidebarX")
+            fun toggleSidebar() { sidebarExpanded = !sidebarExpanded; if (wide) context.getSharedPreferences("fincip_ui", 0).edit().putBoolean("sidebar_expanded", sidebarExpanded).apply() }
             androidx.activity.compose.BackHandler(enabled = !wide && sidebarExpanded) { sidebarExpanded = false }
             Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
               Row(Modifier.fillMaxSize()) {
-                Spacer(Modifier.width(if (wide) sidebarW else SidebarCollapsedWidth))
+                Spacer(Modifier.width(pushW))
                 Box(Modifier.weight(1f)) {
             Scaffold(
                 containerColor = MaterialTheme.colorScheme.background,
@@ -702,20 +714,15 @@ private fun FinCipApp(store: FinanceStore, securePrefs: SecurePrefs) {
                         Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
+                        FinCipMark(Modifier.clip(RoundedCornerShape(10.dp)).clickable(onClickLabel = "Show sidebar") { toggleSidebar() }, size = 40.dp)
                         Column(Modifier.weight(1f).padding(start = 4.dp)) {
-                            Text(NAV_PAGES.firstOrNull { it.id == page }?.title ?: "FinCip", fontWeight = FontWeight.Black, fontSize = 22.sp, letterSpacing = (-0.5).sp, maxLines = 1)
+                            Text(NAV_PAGES.firstOrNull { it.id == page }?.title ?: (if (page == "profile") "Profile" else "FinCip"), fontWeight = FontWeight.Black, fontSize = 22.sp, letterSpacing = (-0.5).sp, maxLines = 1)
                             Text(LocalDate.now().format(DateTimeFormatter.ofPattern("EEE, d MMM", Locale.ENGLISH)).uppercase(), style = MaterialTheme.typography.labelSmall, letterSpacing = 1.2.sp, color = MaterialTheme.colorScheme.onBackground.copy(alpha = .6f), maxLines = 1)
                         }
-                        val chipBg = MaterialTheme.colorScheme.surface
-                        IconButton(modifier = Modifier.size(42.dp).background(chipBg, CircleShape), onClick = { runCatching { voiceLauncher.launch(Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM).putExtra(RecognizerIntent.EXTRA_PROMPT, "Describe your money move")) }.onFailure { notify("Voice input is not available on this device") } }) { Icon(Icons.Default.Mic, contentDescription = "Voice entry", modifier = Modifier.size(20.dp)) }
-                        IconButton(modifier = Modifier.size(42.dp).background(chipBg, CircleShape), onClick = { updateWorkspace { root -> val settings = root.objectOrEmpty("settings"); settings.addProperty("privacyMode", !settings.bool("privacyMode")); root.add("settings", settings) } }) { Icon(if (privacy) Icons.Default.VisibilityOff else Icons.Default.Visibility, contentDescription = "Toggle privacy", modifier = Modifier.size(20.dp)) }
-                        IconButton(modifier = Modifier.size(42.dp).background(chipBg, CircleShape), onClick = { dark = !dark; context.getSharedPreferences("fincip_ui", 0).edit().putBoolean("dark", dark).apply() }) { Icon(if (dark) Icons.Default.LightMode else Icons.Default.DarkMode, contentDescription = "Toggle theme", modifier = Modifier.size(20.dp)) }
+                        IconButton(modifier = Modifier.size(42.dp).background(MaterialTheme.colorScheme.surface, CircleShape), onClick = { updateWorkspace { root -> val settings = root.objectOrEmpty("settings"); settings.addProperty("privacyMode", !settings.bool("privacyMode")); root.add("settings", settings) } }) { Icon(if (privacy) Icons.Default.VisibilityOff else Icons.Default.Visibility, contentDescription = "Toggle privacy", modifier = Modifier.size(20.dp)) }
                     }
                     Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                         MonthMenu(month) { month = it }
-                        NAV_PAGES.filter { it.group == group }.forEach { item ->
-                            PopChip(text = item.title, selected = page == item.id, onClick = { page = item.id })
-                        }
                     }
                   }
                 }
@@ -840,6 +847,7 @@ private fun FinCipApp(store: FinanceStore, securePrefs: SecurePrefs) {
                                 }
                             }, onSignOut = { securePrefs.clearSession(); session = securePrefs.readSupabase(); notify("Signed out") }
                         )
+                        "profile" -> ProfileScreen(workspace, { editingProfile = true }, { group = "Explore"; page = "security" })
                         "security" -> SecurityScreen(workspace, { updateWorkspace { root -> val settings = root.objectOrEmpty("settings"); settings.addProperty("privacyMode", it); root.add("settings", settings) } }, { backupImportLauncher.launch(arrayOf("application/json", "text/*")) }, { backupPasswordDialog = true }, {
                             val pack = JsonObject().apply { addProperty("app", "FinCip"); addProperty("version", 5); addProperty("exportedAt", isoToday()); add("data", workspace.deepCopyObject()) }
                             pendingExport = pack.toString(); exportJsonLauncher.launch("FinCip-backup.json")
@@ -866,11 +874,24 @@ private fun FinCipApp(store: FinanceStore, securePrefs: SecurePrefs) {
                   Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = .5f)).clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { sidebarExpanded = false })
               }
               FinCipSidebar(
-                  pages = NAV_PAGES, selectedPage = page, expanded = sidebarExpanded, width = sidebarW,
-                  onToggle = { sidebarExpanded = !sidebarExpanded; if (wide) context.getSharedPreferences("fincip_ui", 0).edit().putBoolean("sidebar_expanded", sidebarExpanded).apply() },
+                  pages = NAV_PAGES, selectedPage = page, profile = profileOf(workspace), dark = dark,
+                  onToggle = { toggleSidebar() },
+                  onProfile = { page = "profile"; if (!wide) sidebarExpanded = false },
                   onSelect = { target -> group = target.group; page = target.id; if (!wide) sidebarExpanded = false },
-                  modifier = Modifier.align(Alignment.TopStart)
+                  onVoice = { if (!wide) sidebarExpanded = false; startVoice() },
+                  onTheme = { dark = !dark; context.getSharedPreferences("fincip_ui", 0).edit().putBoolean("dark", dark).apply() },
+                  modifier = Modifier.align(Alignment.TopStart).offset(x = sidebarX)
               )
+            }
+        }
+    }
+
+    if (editingProfile) {
+        androidx.compose.ui.window.Dialog(onDismissRequest = { editingProfile = false }, properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)) {
+            FinCipTheme(vibe, dark) {
+                Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).statusBarsPadding()) {
+                    ProfileForm(profileOf(workspace), "Save profile", { saveProfile(it); editingProfile = false }, onCancel = { editingProfile = false })
+                }
             }
         }
     }

@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -36,6 +37,10 @@ import androidx.compose.material.icons.filled.Explore
 import androidx.compose.material.icons.filled.Flag
 import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.DarkMode
+import androidx.compose.material.icons.filled.LightMode
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Insights
 import androidx.compose.material.icons.filled.PieChart
 import androidx.compose.material.icons.filled.Receipt
@@ -67,10 +72,22 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.fincip.nativeapp.data.NavPage
 
-val SidebarCollapsedWidth = 60.dp
-val SidebarExpandedWidth = 248.dp
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.material3.Surface
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.draw.rotate
 
-private val Bone = Color(0xFFF3F0E7)
+val SidebarWidth = 288.dp
 
 private fun groupIcon(group: String): ImageVector = when (group) {
     "Home" -> Icons.Default.Home
@@ -103,84 +120,139 @@ private fun pageIcon(id: String): ImageVector = when (id) {
     else -> Icons.Default.Circle
 }
 
+
+private val SettingIds = setOf("security", "settings")
+
 /**
- * Left navigation. Collapsed: logo plus one icon per section. Expanded: logo, wordmark and every
- * destination grouped under its section. The logo toggles the state. [width] is animated by the caller
- * so the content area can follow it.
+ * Left navigation drawer. The logo in its header (and the matching logo in the page header when it is
+ * hidden) toggles it. Sections are accordions: tap a section to reveal its pages under a thin tree line.
  */
-@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun FinCipSidebar(
     pages: List<NavPage>,
     selectedPage: String,
-    expanded: Boolean,
-    width: Dp,
+    profile: ProfileData,
+    dark: Boolean,
     onToggle: () -> Unit,
+    onProfile: () -> Unit,
     onSelect: (NavPage) -> Unit,
+    onVoice: () -> Unit,
+    onTheme: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val bg = FinCipInk
+    val scheme = MaterialTheme.colorScheme
     val selectedGroup = pages.firstOrNull { it.id == selectedPage }?.group ?: "Home"
-    val groups = pages.map { it.group }.distinct()
-    val labelAlpha = ((width - SidebarCollapsedWidth) / (SidebarExpandedWidth - SidebarCollapsedWidth)).coerceIn(0f, 1f)
-    val context = LocalContext.current
-    Column(
-        modifier.width(width).fillMaxHeight().clipToBounds().background(bg)
-            .statusBarsPadding().navigationBarsPadding().padding(horizontal = 8.dp, vertical = 10.dp)
-    ) {
-        // Logo = toggle. Always visible, same position in both states.
-        Row(
-            Modifier.fillMaxWidth().height(48.dp).clip(RoundedCornerShape(12.dp))
-                .combinedClickable(role = Role.Button, onClickLabel = if (expanded) "Collapse sidebar" else "Expand sidebar", onClick = onToggle),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Spacer(Modifier.width(2.dp))
-            FinCipMark(size = 40.dp)
-            if (labelAlpha > 0.05f) {
-                Spacer(Modifier.width(10.dp))
-                Text("FinCip", color = Bone.copy(alpha = labelAlpha), fontWeight = FontWeight.Black, fontSize = 22.sp, letterSpacing = (-0.6).sp, maxLines = 1, softWrap = false)
-            }
-        }
-        Spacer(Modifier.height(8.dp))
-        Box(Modifier.fillMaxWidth().height(1.dp).background(Bone.copy(alpha = .14f)))
-        Spacer(Modifier.height(10.dp))
+    var open by remember { mutableStateOf(setOf(selectedGroup)) }
+    LaunchedEffect(selectedGroup) { open = open + selectedGroup }
+    val main = pages.filter { it.group == "Home" }
+    val sections = listOf("Money", "Plan", "Explore")
+    val settingsPages = pages.filter { it.id in SettingIds }
 
-        Column(Modifier.weight(1f).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            groups.forEachIndexed { index, group ->
-                val items = pages.filter { it.group == group }
-                if (expanded) {
-                    if (index > 0) { Spacer(Modifier.height(8.dp)); Box(Modifier.fillMaxWidth().height(1.dp).background(Bone.copy(alpha = .10f))); Spacer(Modifier.height(8.dp)) }
-                    Text(
-                        group.uppercase(), color = Bone.copy(alpha = .45f * labelAlpha), style = MaterialTheme.typography.labelSmall,
-                        letterSpacing = 1.6.sp, fontWeight = FontWeight.Black, maxLines = 1, softWrap = false,
-                        modifier = Modifier.padding(start = 12.dp, top = 2.dp, bottom = 4.dp)
-                    )
-                    items.forEach { p ->
-                        SidebarItem(pageIcon(p.id), p.title, p.id == selectedPage, labelAlpha, onClick = { onSelect(p) }, onHint = { Toast.makeText(context, p.title, Toast.LENGTH_SHORT).show() })
-                    }
-                } else {
-                    SidebarItem(groupIcon(group), group, group == selectedGroup, 0f, onClick = { onSelect(items.first()) }, onHint = { Toast.makeText(context, group, Toast.LENGTH_SHORT).show() })
+    Surface(
+        modifier.width(SidebarWidth).fillMaxHeight(),
+        shape = RoundedCornerShape(topEnd = 28.dp, bottomEnd = 28.dp),
+        color = scheme.surface, shadowElevation = 14.dp,
+        border = BorderStroke(1.dp, scheme.outlineVariant)
+    ) {
+        Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().padding(horizontal = 14.dp, vertical = 12.dp)) {
+            // Logo row: same place as the page-header logo, so tapping it feels like one control.
+            Row(Modifier.fillMaxWidth().height(48.dp), verticalAlignment = Alignment.CenterVertically) {
+                FinCipMark(Modifier.clip(RoundedCornerShape(10.dp)).clickable(onClickLabel = "Hide sidebar", onClick = onToggle), size = 40.dp)
+                Spacer(Modifier.width(10.dp))
+                Text("FinCip", fontWeight = FontWeight.Black, fontSize = 22.sp, letterSpacing = (-0.6).sp, color = scheme.onSurface)
+            }
+            Spacer(Modifier.height(10.dp))
+            Row(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).clickable(onClickLabel = "Open profile", onClick = onProfile).padding(vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                ProfileAvatar(profile.seed, size = 46.dp)
+                Spacer(Modifier.width(12.dp))
+                Column(Modifier.weight(1f)) {
+                    Text((profile.tagline.ifBlank { "FinCip member" }).uppercase(), style = MaterialTheme.typography.labelSmall, letterSpacing = 1.2.sp, color = scheme.onSurface.copy(alpha = .55f), maxLines = 1)
+                    Text(profile.name, fontWeight = FontWeight.Bold, fontSize = 17.sp, color = scheme.onSurface, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
+            }
+            Spacer(Modifier.height(8.dp))
+            Box(Modifier.fillMaxWidth().height(1.dp).background(scheme.outlineVariant))
+
+            Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(top = 10.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                SectionLabel("Main")
+                main.forEach { pg -> TopItem(pageIcon(pg.id), pg.title, pg.id == selectedPage, onClick = { onSelect(pg) }) }
+                sections.forEach { group ->
+                    val items = pages.filter { it.group == group && it.id !in SettingIds }
+                    if (items.isNotEmpty()) {
+                        val isOpen = group in open
+                        TopItem(
+                            groupIcon(group), group, selected = isOpen && selectedGroup == group && items.none { it.id == selectedPage }.not(),
+                            trailing = isOpen, onClick = { open = if (isOpen) open - group else open + group }
+                        )
+                        AnimatedVisibility(isOpen, enter = expandVertically(tween(200)), exit = shrinkVertically(tween(180))) {
+                            Row(Modifier.padding(start = 20.dp, top = 2.dp, bottom = 4.dp).height(IntrinsicSize.Min)) {
+                                Box(Modifier.width(1.dp).fillMaxHeight().background(scheme.outlineVariant))
+                                Column(Modifier.padding(start = 10.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                    items.forEach { pg -> SubItem(pg.title, pg.id == selectedPage) { onSelect(pg) } }
+                                }
+                            }
+                        }
+                    }
+                }
+                if (settingsPages.isNotEmpty()) {
+                    Spacer(Modifier.height(6.dp))
+                    Box(Modifier.fillMaxWidth().height(1.dp).background(scheme.outlineVariant))
+                    SectionLabel("Settings")
+                    settingsPages.forEach { pg -> TopItem(pageIcon(pg.id), pg.title, pg.id == selectedPage, onClick = { onSelect(pg) }) }
+                }
+            }
+            Box(Modifier.fillMaxWidth().height(1.dp).background(scheme.outlineVariant))
+            Row(Modifier.fillMaxWidth().padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                QuickAction(Icons.Default.Mic, "Voice entry", Modifier.weight(1f), onVoice)
+                QuickAction(if (dark) Icons.Default.LightMode else Icons.Default.DarkMode, if (dark) "Light mode" else "Dark mode", Modifier.weight(1f), onTheme)
             }
         }
     }
 }
 
-@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun SidebarItem(icon: ImageVector, label: String, selected: Boolean, labelAlpha: Float, onClick: () -> Unit, onHint: () -> Unit) {
-    val bg by animateColorAsState(if (selected) FinCipLime else Color.Transparent, tween(180), label = "sbBg")
-    val fg by animateColorAsState(if (selected) FinCipInk else Bone.copy(alpha = .78f), tween(180), label = "sbFg")
+private fun SectionLabel(text: String) {
+    Text(text.uppercase(), style = MaterialTheme.typography.labelSmall, letterSpacing = 1.4.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .45f), modifier = Modifier.padding(start = 10.dp, top = 6.dp, bottom = 4.dp))
+}
+
+@Composable
+private fun TopItem(icon: ImageVector, label: String, selected: Boolean, trailing: Boolean? = null, onClick: () -> Unit) {
+    val scheme = MaterialTheme.colorScheme
+    val bg by animateColorAsState(if (selected) scheme.surfaceVariant else Color.Transparent, tween(160), label = "tiBg")
+    val rotation by animateFloatAsState(if (trailing == true) 180f else 0f, tween(200), label = "chev")
     Row(
-        Modifier.fillMaxWidth().height(44.dp).clip(RoundedCornerShape(12.dp)).background(bg)
-            .combinedClickable(role = Role.Tab, onLongClick = onHint, onClick = onClick)
-            .padding(horizontal = 12.dp),
+        Modifier.fillMaxWidth().height(46.dp).clip(RoundedCornerShape(14.dp)).background(bg).clickable(role = Role.Button, onClick = onClick).padding(horizontal = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Icon(icon, contentDescription = label, tint = fg, modifier = Modifier.size(22.dp))
-        if (labelAlpha > 0.05f) {
-            Spacer(Modifier.width(12.dp))
-            Text(label, color = fg.copy(alpha = fg.alpha * labelAlpha), fontWeight = if (selected) FontWeight.Black else FontWeight.Bold, style = MaterialTheme.typography.bodyMedium, maxLines = 1, softWrap = false, overflow = TextOverflow.Clip)
-        }
+        Icon(icon, contentDescription = null, tint = scheme.onSurface.copy(alpha = if (selected) 1f else .7f), modifier = Modifier.size(21.dp))
+        Spacer(Modifier.width(12.dp))
+        Text(label, Modifier.weight(1f), fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium, fontSize = 15.sp, color = scheme.onSurface, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        if (trailing != null) Icon(Icons.Default.KeyboardArrowDown, contentDescription = null, tint = scheme.onSurface.copy(alpha = .55f), modifier = Modifier.size(20.dp).rotate(rotation))
+    }
+}
+
+@Composable
+private fun SubItem(label: String, selected: Boolean, onClick: () -> Unit) {
+    val scheme = MaterialTheme.colorScheme
+    val bg by animateColorAsState(if (selected) scheme.surfaceVariant else Color.Transparent, tween(160), label = "siBg")
+    Text(
+        label, fontSize = 14.sp, fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+        color = scheme.onSurface.copy(alpha = if (selected) 1f else .7f), maxLines = 1, overflow = TextOverflow.Ellipsis,
+        modifier = Modifier.fillMaxWidth().height(38.dp).clip(RoundedCornerShape(10.dp)).background(bg).clickable(role = Role.Tab, onClick = onClick).padding(horizontal = 12.dp).wrapContentHeight(Alignment.CenterVertically)
+    )
+}
+
+@Composable
+private fun QuickAction(icon: ImageVector, label: String, modifier: Modifier, onClick: () -> Unit) {
+    val scheme = MaterialTheme.colorScheme
+    Row(
+        modifier.clip(RoundedCornerShape(14.dp)).background(scheme.surfaceVariant).clickable(role = Role.Button, onClick = onClick).padding(horizontal = 12.dp, vertical = 11.dp),
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Icon(icon, contentDescription = null, tint = scheme.onSurface, modifier = Modifier.size(18.dp))
+        Text(label, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = scheme.onSurface, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
