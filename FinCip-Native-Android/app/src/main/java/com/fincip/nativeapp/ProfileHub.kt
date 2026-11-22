@@ -66,6 +66,10 @@ import com.fincip.nativeapp.ui.PopField
 import com.fincip.nativeapp.ui.ProfileAvatar
 import com.fincip.nativeapp.ui.rememberTap
 import com.google.gson.JsonObject
+import com.fincip.nativeapp.ui.LockInput
+import com.fincip.nativeapp.ui.LockTypes
+import com.fincip.nativeapp.ui.lockTypeBlurb
+import com.fincip.nativeapp.ui.lockTypeLabel
 
 private val Banners = listOf(
     listOf(Color(0xFFD9D0F5), Color(0xFFF0A8B0), Color(0xFFF7D774)),
@@ -262,49 +266,64 @@ private fun LockCard(onBlockScreens: (Boolean) -> Unit) {
     var bio by remember { mutableStateOf(AppLock.biometricEnabled(context)) }
     var timeout by remember { mutableIntStateOf(AppLock.timeoutSeconds(context)) }
     var secure by remember { mutableStateOf(AppLock.blockScreenshots(context)) }
-    var mode by remember { mutableStateOf("") } // "", "change", "remove"
-    var current by remember { mutableStateOf("") }
-    var next by remember { mutableStateOf("") }
-    var confirm by remember { mutableStateOf("") }
+    var mode by remember { mutableStateOf("") } // "", "setup", "verify-change", "verify-remove"
+    var type by remember { mutableStateOf("password") }
+    var first by remember { mutableStateOf<String?>(null) }
+    var nonce by remember { mutableIntStateOf(0) }
     var message by remember { mutableStateOf("") }
     val bioOk = remember { AppLock.biometricAvailable(context) }
-    fun reset() { mode = ""; current = ""; next = ""; confirm = "" }
+    fun reset() { mode = ""; first = null; message = ""; nonce += 1 }
     NeoCard {
         SectionTitle("App lock")
-        Text(if (has) "FinCip asks for your password when you open it." else "Protect FinCip with a password. There is no recovery: if you forget it you will have to reinstall, so keep a backup.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .7f))
+        Text(
+            if (has) "FinCip asks for your ${lockTypeLabel(AppLock.lockType(context)).lowercase()} when you open it." else "Lock FinCip with a password, PIN, pattern, drawing, rhythm, emoji code or colour orbs. There is no recovery: if you forget it you will have to reinstall, so keep a backup.",
+            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .7f)
+        )
         Spacer(Modifier.height(12.dp))
-        if (!has || mode == "change") {
-            if (mode == "change") PasswordField(current, { current = it; message = "" }, "Current password")
-            Spacer(Modifier.height(8.dp))
-            PasswordField(next, { next = it; message = "" }, if (has) "New password" else "Choose a password")
-            Spacer(Modifier.height(8.dp))
-            PasswordField(confirm, { confirm = it; message = "" }, "Repeat password")
-            if (message.isNotBlank()) Text(message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(top = 6.dp))
-            Spacer(Modifier.height(12.dp))
-            NeoButton(if (has) "Update password" else "Turn on app lock", Modifier.fillMaxWidth(), onClick = {
+        if (mode == "setup") {
+            if (first == null) {
+                Text("Lock style", fontWeight = FontWeight.Bold)
+                Spacer(Modifier.height(6.dp))
+                Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    LockTypes.forEach { (id, label) -> PopChip(label, type == id, { type = id; nonce += 1; message = "" }) }
+                }
+                Text(lockTypeBlurb(type), style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(top = 6.dp))
+            }
+            Spacer(Modifier.height(10.dp))
+            Text(if (first == null) "Create your ${lockTypeLabel(type).lowercase()}" else "Repeat it to confirm", fontWeight = FontWeight.Black)
+            Spacer(Modifier.height(10.dp))
+            LockInput(type, nonce, { input ->
+                val f = first
                 when {
-                    mode == "change" && !AppLock.verify(context, current) -> message = "Current password is not right."
-                    next.length < 4 -> message = "Use at least 4 characters."
-                    next != confirm -> message = "The two passwords do not match."
-                    else -> { AppLock.setPassword(context, next); has = true; enabled = true; reset(); message = "" }
+                    type == "password" && input.length < 4 -> { message = "Use at least 4 characters."; nonce += 1 }
+                    f == null -> { first = input; message = ""; nonce += 1 }
+                    AppLock.same(type, f, input) -> { AppLock.setSecret(context, type, input); has = true; enabled = true; reset() }
+                    else -> { message = "That did not match. Start again."; first = null; nonce += 1 }
                 }
             })
-            if (mode == "change") { Spacer(Modifier.height(6.dp)); NeoOutlineButton("Cancel", { reset(); message = "" }, Modifier.fillMaxWidth()) }
-        } else if (mode == "remove") {
-            PasswordField(current, { current = it; message = "" }, "Enter password to remove it")
             if (message.isNotBlank()) Text(message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(top = 6.dp))
             Spacer(Modifier.height(10.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                NeoOutlineButton("Cancel", { reset(); message = "" }, Modifier.weight(1f))
-                NeoButton("Remove", Modifier.weight(1f), onClick = {
-                    if (AppLock.verify(context, current)) { AppLock.removePassword(context); has = false; enabled = false; bio = false; reset(); message = "" } else message = "That password is not right."
-                })
-            }
+            NeoOutlineButton("Cancel", { reset() }, Modifier.fillMaxWidth())
+        } else if (mode == "verify-change" || mode == "verify-remove") {
+            val cur = AppLock.lockType(context)
+            Text("Confirm your current ${lockTypeLabel(cur).lowercase()}", fontWeight = FontWeight.Black)
+            Spacer(Modifier.height(10.dp))
+            LockInput(cur, nonce, { input ->
+                if (AppLock.check(context, input)) {
+                    if (mode == "verify-change") { mode = "setup"; first = null; message = ""; nonce += 1 }
+                    else { AppLock.removePassword(context); has = false; enabled = false; bio = false; reset() }
+                } else { message = "That is not right."; nonce += 1 }
+            })
+            if (message.isNotBlank()) Text(message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(top = 6.dp))
+            Spacer(Modifier.height(10.dp))
+            NeoOutlineButton("Cancel", { reset() }, Modifier.fillMaxWidth())
+        } else if (!has) {
+            NeoButton("Set up app lock", Modifier.fillMaxWidth(), onClick = { mode = "setup"; type = "password"; first = null; nonce += 1 })
         } else {
-            SwitchRow("Lock FinCip", "Require the password to open the app.", enabled) { enabled = it; AppLock.setLockEnabled(context, it) }
+            SwitchRow("Lock FinCip", "Require it to open the app.", enabled) { enabled = it; AppLock.setLockEnabled(context, it) }
             Spacer(Modifier.height(8.dp))
             SwitchRow(
-                "Fingerprint / face unlock", if (bioOk) "Use your phone's biometrics instead of typing." else "No fingerprint or face is enrolled on this phone.", bio && bioOk, enabled = bioOk && enabled
+                "Fingerprint / face unlock", if (bioOk) "Use your phone's biometrics instead." else "No fingerprint or face is enrolled on this phone.", bio && bioOk, enabled = bioOk && enabled
             ) { on ->
                 if (!on) { bio = false; AppLock.setBiometric(context, false) }
                 else AppLock.authenticate(context, "Confirm to enable") { ok -> if (ok) { bio = true; AppLock.setBiometric(context, true) } }
@@ -317,11 +336,11 @@ private fun LockCard(onBlockScreens: (Boolean) -> Unit) {
                     PopChip(label, timeout == s, { timeout = s; AppLock.setTimeoutSeconds(context, s) })
                 }
             }
-            Text("Choosing a file (backup, import) leaves the app briefly, so a short delay avoids re-typing.", style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(top = 6.dp))
+            Text("Choosing a file (backup, import) leaves the app briefly, so a short delay avoids re-entering it.", style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(top = 6.dp))
             Spacer(Modifier.height(12.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                NeoOutlineButton("Change password", { mode = "change" }, Modifier.weight(1f))
-                NeoOutlineButton("Remove", { mode = "remove" }, Modifier.weight(1f))
+                NeoOutlineButton("Change lock", { mode = "verify-change"; message = ""; nonce += 1 }, Modifier.weight(1f))
+                NeoOutlineButton("Remove", { mode = "verify-remove"; message = ""; nonce += 1 }, Modifier.weight(1f))
             }
         }
     }

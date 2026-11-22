@@ -47,41 +47,39 @@ fun PasswordField(value: String, onValueChange: (String) -> Unit, label: String,
     )
 }
 
-/** Full-screen lock. Unlocks with the app password or, when enabled, the device fingerprint/face sheet. */
+/** Full-screen lock. Unlocks with the chosen lock style or, when enabled, the device fingerprint/face sheet. */
 @Composable
 fun LockScreen(onUnlocked: () -> Unit) {
     val context = LocalContext.current
-    var pw by remember { mutableStateOf("") }
+    val type = remember { AppLock.lockType(context) }
     var error by remember { mutableStateOf("") }
     var fails by remember { mutableIntStateOf(0) }
     var cooldown by remember { mutableIntStateOf(0) }
+    var nonce by remember { mutableIntStateOf(0) }
     val bio = remember { AppLock.biometricEnabled(context) && AppLock.biometricAvailable(context) }
     fun askBiometric() = AppLock.authenticate(context, "Unlock FinCip") { ok -> if (ok) onUnlocked() }
     LaunchedEffect(Unit) { if (bio) askBiometric() }
     LaunchedEffect(cooldown) { if (cooldown > 0) { delay(1000); cooldown -= 1 } }
-    fun submit() {
-        if (cooldown > 0) return
-        if (AppLock.verify(context, pw)) onUnlocked() else {
-            fails += 1; pw = ""
-            if (fails % 5 == 0) { cooldown = 30; error = "Too many attempts." } else error = "That password is not right."
+    fun attempt(input: String) {
+        if (cooldown > 0) { nonce += 1; return }
+        if (AppLock.check(context, input)) onUnlocked() else {
+            fails += 1; nonce += 1
+            if (fails % 5 == 0) { cooldown = 30; error = "Too many attempts." } else error = "That ${lockTypeLabel(type).lowercase()} is not right."
         }
     }
-    val tap = rememberTap()
+    val scroll = rememberScrollState()
     Column(
-        Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).statusBarsPadding().navigationBarsPadding().imePadding().verticalScroll(rememberScrollState()).padding(28.dp),
+        Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).statusBarsPadding().navigationBarsPadding().imePadding().then(if (type == "password") Modifier.verticalScroll(scroll) else Modifier).padding(28.dp),
         horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center
     ) {
-        Spacer(Modifier.height(40.dp))
-        FinCipMark(size = 84.dp)
-        Spacer(Modifier.height(16.dp))
+        FinCipMark(size = 72.dp)
+        Spacer(Modifier.height(14.dp))
         Text("FinCip is locked", fontWeight = FontWeight.Black, fontSize = 26.sp, color = MaterialTheme.colorScheme.onBackground)
-        Text("Enter your app password to continue.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onBackground.copy(alpha = .7f), textAlign = TextAlign.Center)
-        Spacer(Modifier.height(24.dp))
-        PasswordField(pw, { pw = it; error = "" }, "App password", onDone = { tap(); submit() })
+        Text(lockTypeHint(type), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onBackground.copy(alpha = .7f), textAlign = TextAlign.Center)
+        Spacer(Modifier.height(20.dp))
+        LockInput(type, nonce, { attempt(it) })
         if (cooldown > 0) Text("Try again in ${cooldown}s", color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 8.dp))
         else if (error.isNotBlank()) Text(error, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 8.dp))
-        Spacer(Modifier.height(16.dp))
-        NeoButton("Unlock", Modifier.fillMaxWidth(), onClick = { submit() }, enabled = pw.isNotEmpty() && cooldown == 0)
         if (bio) {
             Spacer(Modifier.height(10.dp))
             NeoOutlineButton("Use fingerprint", { askBiometric() }, Modifier.fillMaxWidth())

@@ -49,7 +49,28 @@ object AppLock {
         return MessageDigest.isEqual(stored, hash(password, salt))
     }
 
-    fun removePassword(c: Context) = prefs(c).edit().remove("hash").remove("salt").putBoolean("enabled", false).putBoolean("bio", false).apply()
+    fun removePassword(c: Context) = prefs(c).edit().remove("hash").remove("salt").remove("tpl").remove("type").putBoolean("enabled", false).putBoolean("bio", false).apply()
+
+    /** "password", "pin", "pattern", "draw", "rhythm", "emoji" or "orbs". */
+    fun lockType(c: Context): String = prefs(c).getString("type", "password") ?: "password"
+    private fun fuzzy(type: String) = type == "draw" || type == "rhythm"
+
+    fun same(type: String, a: String, b: String): Boolean = when (type) {
+        "draw" -> LockShape.sameDrawing(a, b)
+        "rhythm" -> LockShape.sameRhythm(a, b)
+        else -> a == b
+    }
+
+    /** Stores the secret for any lock style. Exact styles are hashed; gesture styles also keep a template for fuzzy matching. */
+    fun setSecret(c: Context, type: String, secret: String) {
+        setPassword(c, secret)
+        prefs(c).edit().putString("type", type).putString("tpl", if (fuzzy(type)) secret else null).apply()
+    }
+
+    fun check(c: Context, input: String): Boolean {
+        val t = lockType(c)
+        return if (fuzzy(t)) same(t, prefs(c).getString("tpl", "") ?: "", input) else verify(c, input)
+    }
 
     @Suppress("DEPRECATION")
     fun biometricAvailable(c: Context): Boolean = when {
