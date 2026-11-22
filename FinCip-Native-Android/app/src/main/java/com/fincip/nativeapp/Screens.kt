@@ -250,7 +250,7 @@ private fun InlineAction(text: String, onClick: () -> Unit) {
 }
 
 @Composable
-fun OverviewScreen(workspace: JsonObject, month: String, privacy: Boolean, savingsRate: Double, balance: Double, onAdd: () -> Unit, onMascot: () -> Unit) {
+fun OverviewScreen(workspace: JsonObject, month: String, privacy: Boolean, savingsRate: Double, balance: Double, onAdd: () -> Unit, onMascot: () -> Unit, onOpen: (String) -> Unit = {}, onNewGoal: () -> Unit = {}, onEditTx: (JsonObject) -> Unit = {}) {
     val base = workspace.objectOrEmpty("settings").string("baseCurrency", "INR")
     val income = incomeTotal(workspace, month)
     val expenses = expenseTotal(workspace, month)
@@ -267,65 +267,7 @@ fun OverviewScreen(workspace: JsonObject, month: String, privacy: Boolean, savin
     val mascotAccent = runCatching { Color(android.graphics.Color.parseColor(pet.string("accent", "#D8FF3E"))) }.getOrElse { Color(0xFFFFD166) }
     val mascotEmoji = when { ramen -> "🍜"; achievedGoal -> "🥳"; savingMood -> when (pet.string("kind", "🐱")) { "🌱" -> "🌳"; "🤖" -> "🤖✨"; "🦊" -> "🦊💛"; else -> "😸" }; expenses > income && income > 0 -> "😵"; else -> pet.string("kind", "🐱") }
     val mood = when { ramen -> "Ramen mode · takeout has crossed the food budget"; achievedGoal -> "Goal unlocked · you reached a savings milestone"; savingMood -> "Thriving · consistent contributions are helping future-you"; expenses > income && income > 0 -> "A little stressed · spending is ahead of income"; else -> "Taking it one transaction at a time" }
-    PageColumn {
-        val hour = java.time.LocalTime.now().hour
-        val greeting = when { hour < 12 -> "Good morning"; hour < 17 -> "Good afternoon"; else -> "Good evening" }
-        val first = profileOf(workspace).name.trim().substringBefore(' ')
-        NeoTitle("YOUR FINANCIAL SPACE", if (first.isBlank()) greeting else "$greeting, $first", "Here's how your money is moving.")
-        val metricDefinitions = listOf(
-            "balance" to Triple("Total balance", if (privacy) "••••••" else money(balance, base), "Across all recorded activity"),
-            "income" to Triple("Income · $month", if (privacy) "••••" else money(income, base), "Money received"),
-            "expenses" to Triple("Spending · $month", if (privacy) "••••" else money(expenses, base), "Money spent"),
-            "savings" to Triple("Savings rate", if (income > 0 && !privacy) "${"%.1f".format(savingsRate)}%" else if (privacy) "••%" else "—", "Monthly income less spending")
-        )
-        val metricFill = mapOf("balance" to Pop.Forest, "income" to Pop.Mint, "expenses" to Pop.Coral, "savings" to Pop.Lavender)
-        val validMetricKeys = metricDefinitions.map { it.first }
-        val storedOrder = workspace.objectOrEmpty("settings").arrayOrEmpty("dashboardOrder").map { it.asStringOr() }
-        val metricOrder = (storedOrder.filter { it in validMetricKeys }.distinct() + validMetricKeys.filterNot { it in storedOrder }).take(4)
-
-        // Hero: the first metric in the user's dashboard order dominates the screen.
-        val heroKey = metricOrder.first()
-        val hero = metricDefinitions.first { it.first == heroKey }.second
-        val heroFill = metricFill.getValue(heroKey)
-        val heroFg = contentOn(heroFill)
-        NeoCard(fill = heroFill) {
-            Row(verticalAlignment = Alignment.Top) {
-                Column(Modifier.weight(1f)) {
-                    Text(hero.first.uppercase(), style = MaterialTheme.typography.labelSmall, letterSpacing = 1.4.sp, fontWeight = FontWeight.Black, color = heroFg.copy(alpha = .75f))
-                    Spacer(Modifier.height(6.dp))
-                    val numSize = when { hero.second.length <= 9 -> 46.sp; hero.second.length <= 13 -> 38.sp; else -> 30.sp }
-                    Text(hero.second, fontSize = numSize, lineHeight = numSize, fontWeight = FontWeight.Black, letterSpacing = (-1).sp, color = heroFg, maxLines = 1, softWrap = false)
-                    Spacer(Modifier.height(4.dp))
-                    Text(hero.third, style = MaterialTheme.typography.bodySmall, color = heroFg.copy(alpha = .8f))
-                }
-                Box(Modifier.size(46.dp).clip(CircleShape).background(heroFg).clickable(onClick = onAdd), contentAlignment = Alignment.Center) {
-                    Icon(Icons.Default.Add, contentDescription = "Add transaction", tint = heroFill, modifier = Modifier.size(24.dp))
-                }
-            }
-            if (income > 0 && !privacy) {
-                Spacer(Modifier.height(14.dp))
-                ProgressBar((savingsRate / 100.0).toFloat(), color = Pop.Sun)
-                Spacer(Modifier.height(6.dp))
-                Text("${"%.0f".format(savingsRate.coerceIn(-999.0, 999.0))}% of $month income kept", style = MaterialTheme.typography.labelSmall, color = heroFg.copy(alpha = .8f), fontWeight = FontWeight.Bold)
-            }
-        }
-        val rest = metricOrder.drop(1)
-        rest.take(2).let { pair ->
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                pair.forEach { key ->
-                    val metric = metricDefinitions.first { it.first == key }.second
-                    Box(Modifier.weight(1f)) { MetricTile(metric.first, metric.second, metric.third, fill = metricFill.getValue(key)) }
-                }
-                if (pair.size == 1) Spacer(Modifier.weight(1f))
-            }
-        }
-        rest.drop(2).forEach { key ->
-            val metric = metricDefinitions.first { it.first == key }.second
-            MetricTile(metric.first, metric.second, metric.third, fill = metricFill.getValue(key))
-        }
-
-        CashFlowCard(workspace, month, privacy, base)
-        BreakdownCard("Where it goes · $month", spendByCategory(workspace, month), privacy, base, "spent", "No spending recorded for $month yet. Add an expense to see the breakdown.")
+    AnalyticsOverview(workspace, month, privacy, base, onAdd, onOpen, onNewGoal, onEditTx) {
         run {
             val petMood = when { ramen -> PetMood.RAMEN; achievedGoal -> PetMood.CELEBRATE; savingMood -> PetMood.THRIVING; expenses > income && income > 0 -> PetMood.STRESSED; else -> PetMood.HAPPY }
             val streak = entryStreak(workspace)
@@ -346,20 +288,6 @@ fun OverviewScreen(workspace: JsonObject, month: String, privacy: Boolean, savin
                 }
             }
         }
-        BadgeRow(listOf(
-            "First entry" to allTransactions.isNotEmpty(),
-            "3-day streak" to (entryStreak(workspace) >= 3),
-            "Saver 20%+" to (income > 0 && savingsRate >= 20),
-            "Budgeter" to workspace.arrayOrEmpty("budgets").size().let { it > 0 },
-            "Goal getter" to achievedGoal,
-            "Investor" to workspace.arrayOrEmpty("financeProducts").size().let { it > 0 }
-        ))
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("Recent movement", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Black, modifier = Modifier.weight(1f))
-            InlineAction("Add +", onAdd)
-        }
-        if (allTransactions.isEmpty()) NeoCard { Text("Your first money move starts here.", fontWeight = FontWeight.Bold); Text("Add income or an expense to see your dashboard come alive.", style = MaterialTheme.typography.bodySmall) }
-        allTransactions.takeLast(5).asReversed().forEach { TransactionCard(it, privacy, onClick = onAdd, onDelete = {}) }
     }
 }
 

@@ -38,8 +38,8 @@ object Pop {
     val Lavender = Color(0xFFD9D0F5)
     val Peach = Color(0xFFFAD9BC)
     val Mint = Color(0xFFDDEFD6)
-    val Indigo = Color(0xFF0F1A14)
-    val IndigoHi = Color(0xFF18271E)
+    val Indigo = Color(0xFF0E100E)
+    val IndigoHi = Color(0xFF1B1D1B)
     val Gain = Color(0xFF3C9460)
     val Loss = Color(0xFFD9706A)
     val Radius = 22.dp
@@ -72,15 +72,15 @@ private fun popLight() = lightColorScheme(
 )
 
 private fun popDark() = darkColorScheme(
-    primary = Color(0xFFA8D98A), onPrimary = Pop.Ink,
+    primary = Pop.Lime, onPrimary = Pop.Ink,
     secondary = Pop.Coral, onSecondary = Color.White,
     tertiary = Pop.Teal, onTertiary = Color.White,
     background = Pop.Indigo, onBackground = Pop.Cream,
     surface = Pop.IndigoHi, onSurface = Pop.Cream,
-    surfaceVariant = Color(0xFF22352A), onSurfaceVariant = Color(0xFFCFD9CF),
-    secondaryContainer = Color(0xFF2B4A36), onSecondaryContainer = Pop.Cream,
-    primaryContainer = Color(0xFF2B4A36), onPrimaryContainer = Pop.Cream,
-    outline = Color(0xFF4A6354), outlineVariant = Color(0xFF2C4034)
+    surfaceVariant = Color(0xFF262926), onSurfaceVariant = Color(0xFFCFD3CF),
+    secondaryContainer = Color(0xFF2E3A22), onSecondaryContainer = Pop.Cream,
+    primaryContainer = Color(0xFF2E3A22), onPrimaryContainer = Pop.Cream,
+    outline = Color(0xFF555955), outlineVariant = Color(0xFF2A2D2A)
 )
 
 @Composable

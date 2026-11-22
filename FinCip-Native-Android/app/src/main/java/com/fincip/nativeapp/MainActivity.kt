@@ -671,7 +671,7 @@ private fun FinCipApp(store: FinanceStore, securePrefs: SecurePrefs) {
     val notificationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
     LaunchedEffect(Unit) { if (Build.VERSION.SDK_INT >= 33) notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS) }
 
-    FinCipTheme(vibe, dark) {
+    FinCipTheme(vibe, dark || (page == "overview" && vibe == "Leaf")) {
         val lightBars = MaterialTheme.colorScheme.background.luminance() > 0.5f
         SideEffect {
             (context as? Activity)?.window?.let { w ->
@@ -730,7 +730,7 @@ private fun FinCipApp(store: FinanceStore, securePrefs: SecurePrefs) {
                 Column(Modifier.fillMaxSize().padding(innerPadding).navigationBarsPadding()) {
                     Crossfade(targetState = page, animationSpec = tween(180), label = "page") { currentPage ->
                     when (currentPage) {
-                        "overview" -> OverviewScreen(workspace, month, privacy, savingsRate, balance, onAdd = { openForm("transaction") }, onMascot = { group = "Explore"; page = "settings" })
+                        "overview" -> OverviewScreen(workspace, month, privacy, savingsRate, balance, onAdd = { openForm("transaction") }, onMascot = { group = "Explore"; page = "settings" }, onOpen = { id -> NAV_PAGES.firstOrNull { it.id == id }?.let { group = it.group; page = it.id } }, onNewGoal = { openForm("goal") }, onEditTx = { openForm("transaction", it) })
                         "transactions" -> TransactionsScreen(workspace, month, privacy, transactionQuery, { transactionQuery = it }, { openForm("transaction") }, { openForm("transaction", it) }, { deleteFromArray("transactions", it.string("id")) }, { statementLauncher.launch(arrayOf("text/*", "application/octet-stream")) }, { exportCsvLauncher.launch("FinCip-transactions.csv") })
                         "recurring" -> RecurringScreen(workspace, privacy, { openForm("bill") }, { deleteFromArray("recurringRules", it.string("id")) }, { markRecurringPaid(it) })
                         "calendar" -> CalendarScreen(workspace, month, { month = it })
