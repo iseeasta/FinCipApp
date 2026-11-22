@@ -195,8 +195,8 @@ private fun FinCipApp(store: FinanceStore, securePrefs: SecurePrefs) {
     var vibe by remember {
         val sp = context.getSharedPreferences("fincip_ui", 0)
         // One-time switch so existing installs land on the new look; the user can still change it in Settings.
-        if (!sp.getBoolean("brut_v1", false)) { sp.edit().putString("vibe", "Brutalist Lime").putBoolean("brut_v1", true).apply() }
-        mutableStateOf(sp.getString("vibe", "Brutalist Lime") ?: "Brutalist Lime")
+        if (!sp.getBoolean("leaf_v1", false)) { sp.edit().putString("vibe", "Leaf").putBoolean("leaf_v1", true).apply() }
+        mutableStateOf(sp.getString("vibe", "Leaf") ?: "Leaf")
     }
     var dark by remember { mutableStateOf(context.getSharedPreferences("fincip_ui", 0).getBoolean("dark", false)) }
     var page by remember { mutableStateOf("overview") }
@@ -314,7 +314,7 @@ private fun FinCipApp(store: FinanceStore, securePrefs: SecurePrefs) {
         taxAgeGroup = importedTax.string("ageGroup", "below60")
         taxResident = importedTax.bool("resident", true)
         val importedVibe = next.objectOrEmpty("settings").string("vibeTheme", "Material You")
-        if (importedVibe in listOf("Brutalist Lime", "Pastel Pop", "Material You", "System", "Y2K Acid", "Cozy Lo-Fi", "Receipt Paper")) {
+        if (importedVibe in listOf("Leaf", "Brutalist Lime", "Pastel Pop", "Material You", "System", "Y2K Acid", "Cozy Lo-Fi", "Receipt Paper")) {
             vibe = if (importedVibe == "System") "Material You" else importedVibe
             context.getSharedPreferences("fincip_ui", 0).edit().putString("vibe", vibe).apply()
         }
@@ -681,11 +681,11 @@ private fun FinCipApp(store: FinanceStore, securePrefs: SecurePrefs) {
             }
         }
         if (loading) {
-            Box(Modifier.fillMaxSize().background(FinCipInk), contentAlignment = Alignment.Center) {
+            Box(Modifier.fillMaxSize().background(Color(0xFFF6F5EF)), contentAlignment = Alignment.Center) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                    FinCipMark(size = 88.dp)
-                    Text("FinCip", color = Color(0xFFF3F0E7), fontWeight = FontWeight.Black, fontSize = 30.sp, letterSpacing = (-1).sp)
-                    Text("OPENING YOUR MONEY SPACE", color = Color(0xFFF3F0E7).copy(alpha = .55f), style = MaterialTheme.typography.labelSmall, letterSpacing = 1.6.sp)
+                    FinCipMark(size = 96.dp, glyph = FinCipInk)
+                    Text("FinCip", color = FinCipInk, fontWeight = FontWeight.Black, fontSize = 30.sp, letterSpacing = (-1).sp)
+                    Text("OPENING YOUR MONEY SPACE", color = FinCipInk.copy(alpha = .55f), style = MaterialTheme.typography.labelSmall, letterSpacing = 1.6.sp)
                 }
             }
         } else if (workspace.objectOrEmpty("profile").string("name").isBlank()) {
@@ -714,7 +714,7 @@ private fun FinCipApp(store: FinanceStore, securePrefs: SecurePrefs) {
                         Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        FinCipMark(Modifier.clip(RoundedCornerShape(10.dp)).clickable(onClickLabel = "Show sidebar") { toggleSidebar() }, size = 40.dp)
+                        FinCipMark(Modifier.clip(RoundedCornerShape(10.dp)).clickable(onClickLabel = "Show sidebar") { toggleSidebar() }, size = 38.dp)
                         Column(Modifier.weight(1f).padding(start = 4.dp)) {
                             Text(NAV_PAGES.firstOrNull { it.id == page }?.title ?: (if (page == "profile") "Profile" else "FinCip"), fontWeight = FontWeight.Black, fontSize = 22.sp, letterSpacing = (-0.5).sp, maxLines = 1)
                             Text(LocalDate.now().format(DateTimeFormatter.ofPattern("EEE, d MMM", Locale.ENGLISH)).uppercase(), style = MaterialTheme.typography.labelSmall, letterSpacing = 1.2.sp, color = MaterialTheme.colorScheme.onBackground.copy(alpha = .6f), maxLines = 1)

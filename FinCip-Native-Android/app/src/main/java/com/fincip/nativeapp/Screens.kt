@@ -71,6 +71,7 @@ import com.fincip.nativeapp.data.string
 import com.fincip.nativeapp.data.toBase
 import com.fincip.nativeapp.data.transactions
 import com.fincip.nativeapp.ui.Field
+import com.fincip.nativeapp.ui.FinCipMark
 import com.fincip.nativeapp.ui.ProfileAvatar
 import com.fincip.nativeapp.ui.ProfileData
 import com.fincip.nativeapp.ui.MiniBars
@@ -115,27 +116,22 @@ private fun PageColumn(content: @Composable ColumnScope.() -> Unit) {
     Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(14.dp), content = content)
 }
 
-private val heroPalette = listOf(Pop.Lavender, Pop.Peach, Pop.Mint, Pop.Sun, Color(0xFFB8E3F2), Color(0xFFF9C6D0), Color(0xFFD9F0A3), Pop.Coral)
-
-/** Big colour-blocked page header with geometric shapes. Colour is stable per page (derived from the eyebrow). */
+/** Soft header card: pale green block with leaf blobs, big title, short description and the FinCip mark. */
 @Composable
 private fun PageHeading(eyebrow: String, title: String, description: String = "") {
-    val fill = heroPalette[(eyebrow.hashCode() and 0x7fffffff) % heroPalette.size]
-    val fg = contentOn(fill)
+    val fill = MaterialTheme.colorScheme.primaryContainer
+    val fg = MaterialTheme.colorScheme.onPrimaryContainer
     Box(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(32.dp)).background(fill).drawBehind {
-            drawCircle(Color.White.copy(alpha = .30f), radius = size.minDimension * .62f, center = Offset(size.width, 0f))
-            drawCircle(Color.Black.copy(alpha = .07f), radius = size.minDimension * .30f, center = Offset(size.width * .88f, size.height))
-            drawCircle(Color.White.copy(alpha = .45f), radius = 12.dp.toPx(), center = Offset(size.width * .70f, size.height * .22f))
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(Pop.Radius)).background(fill).drawBehind {
+            drawCircle(Color.White.copy(alpha = .35f), radius = size.minDimension * .75f, center = Offset(size.width * 1.0f, -size.height * .1f))
+            drawCircle(Pop.Teal.copy(alpha = .12f), radius = size.minDimension * .42f, center = Offset(size.width * .92f, size.height))
         }.padding(22.dp)
     ) {
-        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text(
-                eyebrow.uppercase(), style = MaterialTheme.typography.labelSmall, letterSpacing = 1.4.sp, fontWeight = FontWeight.Black, color = Pop.Ink,
-                modifier = Modifier.clip(RoundedCornerShape(50)).background(Color.White.copy(alpha = .55f)).padding(horizontal = 11.dp, vertical = 5.dp)
-            )
-            Text(title, style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Black, color = fg)
-            if (description.isNotBlank()) Text(description, style = MaterialTheme.typography.bodyMedium, color = fg.copy(alpha = .82f), modifier = Modifier.fillMaxWidth(.88f))
+        FinCipMark(Modifier.align(Alignment.TopEnd), size = 64.dp)
+        Column(Modifier.fillMaxWidth(.72f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(eyebrow.uppercase(), style = MaterialTheme.typography.labelSmall, letterSpacing = 1.4.sp, fontWeight = FontWeight.Black, color = fg.copy(alpha = .7f))
+            Text(title, style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Black, color = MaterialTheme.colorScheme.onSurface)
+            if (description.isNotBlank()) Text(description, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .78f))
         }
     }
 }
@@ -272,14 +268,17 @@ fun OverviewScreen(workspace: JsonObject, month: String, privacy: Boolean, savin
     val mascotEmoji = when { ramen -> "🍜"; achievedGoal -> "🥳"; savingMood -> when (pet.string("kind", "🐱")) { "🌱" -> "🌳"; "🤖" -> "🤖✨"; "🦊" -> "🦊💛"; else -> "😸" }; expenses > income && income > 0 -> "😵"; else -> pet.string("kind", "🐱") }
     val mood = when { ramen -> "Ramen mode · takeout has crossed the food budget"; achievedGoal -> "Goal unlocked · you reached a savings milestone"; savingMood -> "Thriving · consistent contributions are helping future-you"; expenses > income && income > 0 -> "A little stressed · spending is ahead of income"; else -> "Taking it one transaction at a time" }
     PageColumn {
-        NeoTitle("YOUR FINANCIAL SPACE", "Make room for what matters.", "A native, local-first money companion. Your data stays on this device unless you enable sync.")
+        val hour = java.time.LocalTime.now().hour
+        val greeting = when { hour < 12 -> "Good morning"; hour < 17 -> "Good afternoon"; else -> "Good evening" }
+        val first = profileOf(workspace).name.trim().substringBefore(' ')
+        NeoTitle("YOUR FINANCIAL SPACE", if (first.isBlank()) greeting else "$greeting, $first", "Here's how your money is moving.")
         val metricDefinitions = listOf(
             "balance" to Triple("Total balance", if (privacy) "••••••" else money(balance, base), "Across all recorded activity"),
             "income" to Triple("Income · $month", if (privacy) "••••" else money(income, base), "Money received"),
             "expenses" to Triple("Spending · $month", if (privacy) "••••" else money(expenses, base), "Money spent"),
             "savings" to Triple("Savings rate", if (income > 0 && !privacy) "${"%.1f".format(savingsRate)}%" else if (privacy) "••%" else "—", "Monthly income less spending")
         )
-        val metricFill = mapOf("balance" to Pop.Teal, "income" to Pop.Mint, "expenses" to Pop.Coral, "savings" to Pop.Lavender)
+        val metricFill = mapOf("balance" to Pop.Forest, "income" to Pop.Mint, "expenses" to Pop.Coral, "savings" to Pop.Lavender)
         val validMetricKeys = metricDefinitions.map { it.first }
         val storedOrder = workspace.objectOrEmpty("settings").arrayOrEmpty("dashboardOrder").map { it.asStringOr() }
         val metricOrder = (storedOrder.filter { it in validMetricKeys }.distinct() + validMetricKeys.filterNot { it in storedOrder }).take(4)
@@ -1209,7 +1208,7 @@ fun SettingsScreen(workspace: JsonObject, vibe: String, onVibe: (String) -> Unit
         PageHeading("MAKE THE APP FEEL LIKE YOURS", "Set your FinCip vibe.", "Material You dynamic color, playful palettes, and a mascot that grows with your habits.")
         NeoCard {
             Text("Vibe themes", fontWeight = FontWeight.Black, style = MaterialTheme.typography.titleLarge)
-            listOf("Brutalist Lime", "Material You", "Y2K Acid", "Cozy Lo-Fi", "Receipt Paper").forEach { item -> Row(Modifier.fillMaxWidth().clickable { onVibe(item) }.padding(vertical = 7.dp), verticalAlignment = Alignment.CenterVertically) { Text(if (vibe == item) "●" else "○", Modifier.padding(end = 9.dp), color = MaterialTheme.colorScheme.primary); Column(Modifier.weight(1f)) { Text(item, fontWeight = FontWeight.Bold); Text(when (item) { "Material You" -> "Use Android wallpaper colours on Android 12+"; "Y2K Acid" -> "Acid lime, pink and electric blue"; "Cozy Lo-Fi" -> "Warm paper, clay and olive"; else -> "Thermal receipt paper and monospace details" }, style = MaterialTheme.typography.labelSmall) } } }
+            listOf("Leaf", "Material You", "Y2K Acid", "Cozy Lo-Fi", "Receipt Paper").forEach { item -> Row(Modifier.fillMaxWidth().clickable { onVibe(item) }.padding(vertical = 7.dp), verticalAlignment = Alignment.CenterVertically) { Text(if (vibe == item) "●" else "○", Modifier.padding(end = 9.dp), color = MaterialTheme.colorScheme.primary); Column(Modifier.weight(1f)) { Text(item, fontWeight = FontWeight.Bold); Text(when (item) { "Material You" -> "Use Android wallpaper colours on Android 12+"; "Y2K Acid" -> "Acid lime, pink and electric blue"; "Cozy Lo-Fi" -> "Warm paper, clay and olive"; else -> "Thermal receipt paper and monospace details" }, style = MaterialTheme.typography.labelSmall) } } }
             Divider(Modifier.padding(vertical = 6.dp))
             Row(verticalAlignment = Alignment.CenterVertically) { Text("Dark appearance", Modifier.weight(1f), fontWeight = FontWeight.Bold); FilterChip(selected = dark, onClick = { onDark(!dark) }, label = { Text(if (dark) "Dark" else "Light") }) }
         }

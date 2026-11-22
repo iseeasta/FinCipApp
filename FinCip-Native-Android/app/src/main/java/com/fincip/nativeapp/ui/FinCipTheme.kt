@@ -23,24 +23,26 @@ import androidx.compose.ui.unit.sp
 
 
 /**
- * FinCip "Brutalist Lime" design tokens. Legacy colour names (Coral, Teal, ...) are kept so every screen
- * re-themes at once: Sun = lime accent, Teal = positive green, Coral = restrained red, Lavender/Peach = muted bone blocks.
+ * FinCip "Leaf" design tokens: warm cream, deep forest green, soft pastel tiles. Legacy colour names are
+ * kept so every screen re-themes at once: Teal = positive green, Coral = restrained red, Sun = amber,
+ * Lavender/Peach/Mint = soft pastel blocks.
  */
 object Pop {
-    val Cream = Color(0xFFF6F5EF)
-    val Ink = Color(0xFF171717)
+    val Cream = Color(0xFFFBF7EE)
+    val Ink = Color(0xFF16231B)
+    val Forest = Color(0xFF1F5C3A)
     val Lime = Color(0xFFB9F227)
-    val Coral = Color(0xFFD66B67)
-    val Teal = Color(0xFF4F9B69)
-    val Sun = Lime
-    val Lavender = Color(0xFFEAECE3)
-    val Peach = Color(0xFFDDE3CF)
-    val Mint = Color(0xFFE3F7A6)
-    val Indigo = Color(0xFF121212)
-    val IndigoHi = Color(0xFF1F1F1D)
-    val Gain = Color(0xFF4F9B69)
-    val Loss = Color(0xFFD66B67)
-    val Radius = 20.dp
+    val Coral = Color(0xFFD9706A)
+    val Teal = Color(0xFF3C9460)
+    val Sun = Color(0xFFF0C14B)
+    val Lavender = Color(0xFFD9D0F5)
+    val Peach = Color(0xFFFAD9BC)
+    val Mint = Color(0xFFDDEFD6)
+    val Indigo = Color(0xFF0F1A14)
+    val IndigoHi = Color(0xFF18271E)
+    val Gain = Color(0xFF3C9460)
+    val Loss = Color(0xFFD9706A)
+    val Radius = 22.dp
     val RadiusSmall = 14.dp
 }
 
@@ -58,27 +60,27 @@ val PopFont = FontFamily(
 fun contentOn(bg: Color): Color = if (bg.luminance() > 0.42f) Pop.Ink else Pop.Cream
 
 private fun popLight() = lightColorScheme(
-    primary = Pop.Ink, onPrimary = Pop.Cream,
+    primary = Pop.Forest, onPrimary = Color.White,
     secondary = Pop.Coral, onSecondary = Color.White,
     tertiary = Pop.Teal, onTertiary = Color.White,
     background = Pop.Cream, onBackground = Pop.Ink,
-    surface = Color.White, onSurface = Pop.Ink,
-    surfaceVariant = Color(0xFFEAECE3), onSurfaceVariant = Color(0xFF3B3B36),
+    surface = Color(0xFFFFFDF8), onSurface = Pop.Ink,
+    surfaceVariant = Color(0xFFF1EDDF), onSurfaceVariant = Color(0xFF45524A),
     secondaryContainer = Pop.Mint, onSecondaryContainer = Pop.Ink,
-    primaryContainer = Pop.Lime, onPrimaryContainer = Pop.Ink,
-    outline = Pop.Ink, outlineVariant = Color(0xFFCBCDC0)
+    primaryContainer = Pop.Mint, onPrimaryContainer = Pop.Forest,
+    outline = Color(0xFFC9CDBE), outlineVariant = Color(0xFFE8E6D8)
 )
 
 private fun popDark() = darkColorScheme(
-    primary = Pop.Lime, onPrimary = Pop.Ink,
+    primary = Color(0xFFA8D98A), onPrimary = Pop.Ink,
     secondary = Pop.Coral, onSecondary = Color.White,
     tertiary = Pop.Teal, onTertiary = Color.White,
     background = Pop.Indigo, onBackground = Pop.Cream,
     surface = Pop.IndigoHi, onSurface = Pop.Cream,
-    surfaceVariant = Color(0xFF2B2B28), onSurfaceVariant = Color(0xFFD8D8CE),
-    secondaryContainer = Color(0xFF34402A), onSecondaryContainer = Pop.Cream,
-    primaryContainer = Color(0xFF3E5210), onPrimaryContainer = Pop.Cream,
-    outline = Color(0xFF8C8C82), outlineVariant = Color(0xFF3A3A36)
+    surfaceVariant = Color(0xFF22352A), onSurfaceVariant = Color(0xFFCFD9CF),
+    secondaryContainer = Color(0xFF2B4A36), onSecondaryContainer = Pop.Cream,
+    primaryContainer = Color(0xFF2B4A36), onPrimaryContainer = Pop.Cream,
+    outline = Color(0xFF4A6354), outlineVariant = Color(0xFF2C4034)
 )
 
 @Composable
@@ -88,7 +90,7 @@ fun FinCipTheme(vibe: String, dark: Boolean, content: @Composable () -> Unit) {
     val useDark = dark || ((vibe == "System" || vibe == "Material You") && systemDark)
 
     val scheme = when (vibe) {
-        "Pastel Pop", "Brutalist Lime" -> if (useDark) popDark() else popLight()
+        "Pastel Pop", "Brutalist Lime", "Leaf" -> if (useDark) popDark() else popLight()
         "Material You", "System" -> if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             if (useDark) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
         } else if (useDark) fallbackDark() else fallbackLight()

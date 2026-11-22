@@ -67,8 +67,8 @@ fun Modifier.hardShadow(color: Color, radius: Dp, offset: Dp = 4.dp): Modifier =
 }
 
 /**
- * Brutalist surface: thin ink border and hard offset shadow. Text inside automatically picks a readable
- * colour for [fill]. Pass a [Pop] colour for a coloured block; default is the plain themed surface.
+ * Soft surface: rounded corners, hairline border and a gentle drop shadow. Text inside automatically picks a
+ * readable colour for [fill]. Pass a [Pop] colour for a coloured block; default is the plain themed surface.
  */
 @Composable
 fun NeoCard(
@@ -79,37 +79,33 @@ fun NeoCard(
     val shape = RoundedCornerShape(Pop.Radius)
     CompositionLocalProvider(LocalContentColor provides contentOn(fill)) {
         Surface(
-            modifier = modifier.fillMaxWidth().padding(end = 4.dp, bottom = 4.dp).hardShadow(hardShadowColor(), Pop.Radius),
+            modifier = modifier.fillMaxWidth(),
             shape = shape,
             color = fill,
             tonalElevation = 0.dp,
-            shadowElevation = 0.dp,
-            border = BorderStroke(1.5.dp, MaterialTheme.colorScheme.outline)
+            shadowElevation = 3.dp,
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
         ) {
             Column(Modifier.padding(18.dp), content = content)
         }
     }
 }
 
-/** Primary action: lime block, ink border, hard shadow that collapses on press. */
+/** Primary action: deep-green pill that presses in slightly. */
 @Composable
 fun NeoButton(text: String, modifier: Modifier = Modifier, onClick: () -> Unit, enabled: Boolean = true) {
     val source = remember { MutableInteractionSource() }
     val pressed by source.collectIsPressedAsState()
-    val shift by animateDpAsState(if (pressed) 0.dp else 3.dp, tween(80), label = "press")
-    val shadow = hardShadowColor()
-    Box(modifier.padding(end = 3.dp, bottom = 3.dp)) {
-        Button(
-            onClick = onClick,
-            enabled = enabled,
-            interactionSource = source,
-            modifier = Modifier.fillMaxWidth().height(52.dp).offset(x = 3.dp - shift, y = 3.dp - shift).hardShadow(if (enabled) shadow else Color.Transparent, 14.dp, shift),
-            shape = RoundedCornerShape(14.dp),
-            border = BorderStroke(1.5.dp, if (enabled) MaterialTheme.colorScheme.outline else Color.Transparent),
-            colors = ButtonDefaults.buttonColors(containerColor = Pop.Lime, contentColor = Pop.Ink, disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant, disabledContentColor = MaterialTheme.colorScheme.onSurface.copy(alpha = .4f)),
-            elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp, pressedElevation = 0.dp)
-        ) { Text(text, fontWeight = FontWeight.ExtraBold) }
-    }
+    val scale by animateFloatAsState(if (pressed) 0.97f else 1f, tween(90), label = "press")
+    Button(
+        onClick = onClick,
+        enabled = enabled,
+        interactionSource = source,
+        modifier = modifier.scale(scale).height(52.dp),
+        shape = RoundedCornerShape(50),
+        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary, contentColor = MaterialTheme.colorScheme.onPrimary, disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant, disabledContentColor = MaterialTheme.colorScheme.onSurface.copy(alpha = .4f)),
+        elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp, pressedElevation = 0.dp)
+    ) { Text(text, fontWeight = FontWeight.ExtraBold) }
 }
 
 @Composable
@@ -121,8 +117,8 @@ fun NeoOutlineButton(text: String, onClick: () -> Unit, modifier: Modifier = Mod
         onClick = onClick,
         interactionSource = source,
         modifier = modifier.scale(scale).height(48.dp),
-        shape = RoundedCornerShape(14.dp),
-        border = BorderStroke(1.5.dp, LocalContentColor.current),
+        shape = RoundedCornerShape(50),
+        border = BorderStroke(1.2.dp, LocalContentColor.current.copy(alpha = .5f)),
         colors = ButtonDefaults.outlinedButtonColors(contentColor = LocalContentColor.current)
     ) { Text(text, fontWeight = FontWeight.Bold) }
 }
@@ -130,15 +126,14 @@ fun NeoOutlineButton(text: String, onClick: () -> Unit, modifier: Modifier = Mod
 /** Selectable pill used for category/filter rows. Selected = dark ink fill. */
 @Composable
 fun PopChip(text: String, selected: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier, leading: ImageVector? = null) {
-    val bg = if (selected) Pop.Lime else MaterialTheme.colorScheme.surface
-    val fg = if (selected) Pop.Ink else MaterialTheme.colorScheme.onSurface
+    val bg = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
+    val fg = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
     Surface(
         onClick = onClick,
         modifier = modifier,
-        shape = RoundedCornerShape(12.dp),
+        shape = RoundedCornerShape(50),
         color = bg,
-        contentColor = fg,
-        border = BorderStroke(1.5.dp, MaterialTheme.colorScheme.outline)
+        contentColor = fg
     ) {
         Row(Modifier.padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             if (leading != null) Icon(leading, contentDescription = null, modifier = Modifier.size(16.dp))
