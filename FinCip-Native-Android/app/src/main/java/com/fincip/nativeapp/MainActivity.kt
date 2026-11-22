@@ -202,6 +202,7 @@ private fun FinCipApp(store: FinanceStore, securePrefs: SecurePrefs) {
         val sp = context.getSharedPreferences("fincip_ui", 0)
         // One-time switch so existing installs land on the new look; the user can still change it in Settings.
         if (!sp.getBoolean("leaf_v1", false)) { sp.edit().putString("vibe", "Leaf").putBoolean("leaf_v1", true).apply() }
+        if (sp.getString("vibe", "Leaf") == "Brutalist Lime") sp.edit().putString("vibe", "Brutalist").apply()
         mutableStateOf(sp.getString("vibe", "Leaf") ?: "Leaf")
     }
     var dark by remember { mutableStateOf(context.getSharedPreferences("fincip_ui", 0).getBoolean("dark", false)) }
@@ -209,7 +210,7 @@ private fun FinCipApp(store: FinanceStore, securePrefs: SecurePrefs) {
     var group by remember { mutableStateOf("Home") }
     var sidebarExpanded by remember { mutableStateOf(context.resources.configuration.screenWidthDp >= 600 && context.getSharedPreferences("fincip_ui", 0).getBoolean("sidebar_expanded", true)) }
     var editingProfile by remember { mutableStateOf(false) }
-    var accent by remember { mutableStateOf(context.getSharedPreferences("fincip_ui", 0).getString("accent", "Green") ?: "Green") }
+    var accent by remember { mutableStateOf(context.getSharedPreferences("fincip_ui", 0).getString("accent_v2", "Default") ?: "Default") }
     var appIcon by remember { mutableStateOf(AppIcons.current(context)) }
     var soundOn by remember { mutableStateOf(context.getSharedPreferences("fincip_ui", 0).getBoolean("sfx", true)) }
     var hapticOn by remember { mutableStateOf(context.getSharedPreferences("fincip_ui", 0).getBoolean("haptic", true)) }
@@ -341,7 +342,7 @@ private fun FinCipApp(store: FinanceStore, securePrefs: SecurePrefs) {
         taxAgeGroup = importedTax.string("ageGroup", "below60")
         taxResident = importedTax.bool("resident", true)
         val importedVibe = next.objectOrEmpty("settings").string("vibeTheme", "Material You")
-        if (importedVibe in listOf("Leaf", "Brutalist Lime", "Pastel Pop", "Material You", "System", "Y2K Acid", "Cozy Lo-Fi", "Receipt Paper")) {
+        if (importedVibe in com.fincip.nativeapp.ui.Vibes.map { it.name } + listOf("Brutalist Lime", "Pastel Pop", "System")) {
             vibe = if (importedVibe == "System") "Material You" else importedVibe
             context.getSharedPreferences("fincip_ui", 0).edit().putString("vibe", vibe).apply()
         }
@@ -698,7 +699,7 @@ private fun FinCipApp(store: FinanceStore, securePrefs: SecurePrefs) {
     val notificationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
     LaunchedEffect(Unit) { if (Build.VERSION.SDK_INT >= 33) notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS) }
 
-    FinCipTheme(vibe, dark || (page == "overview" && vibe == "Leaf"), accent) {
+    FinCipTheme(vibe, dark, accent) {
         val lightBars = MaterialTheme.colorScheme.background.luminance() > 0.5f
         SideEffect {
             (context as? Activity)?.window?.let { w ->
@@ -879,10 +880,13 @@ private fun FinCipApp(store: FinanceStore, securePrefs: SecurePrefs) {
 "profile", "settings", "security", "customize" -> ProfileHub(
                             workspace, initialTab = when (currentPage) { "settings" -> 1; "security" -> 2; "customize" -> 3; else -> 0 },
                             onProfileChange = { block -> updateProfile(block) }, onPetChange = { block -> updateMascot(block) },
-                            accent = accent, onAccent = { accent = it; context.getSharedPreferences("fincip_ui", 0).edit().putString("accent", it).apply() },
+                            accent = accent, onAccent = { accent = it; context.getSharedPreferences("fincip_ui", 0).edit().putString("accent_v2", it).apply() },
                             appIcon = appIcon, onAppIcon = { appIcon = it; AppIcons.apply(context, it) },
                             onBlockScreens = { applySecure(it) },
-                            settingsContent = {
+                            vibe = vibe, onVibe = { vibe = it; context.getSharedPreferences("fincip_ui", 0).edit().putString("vibe", it).apply() },
+                            dark = dark, onDark = { dark = it; context.getSharedPreferences("fincip_ui", 0).edit().putBoolean("dark", it).apply() },
+                            soundOn = soundOn,
+                            settingsContent = { section ->
                                 SettingsScreen(
                             workspace, vibe, { vibe = it; context.getSharedPreferences("fincip_ui", 0).edit().putString("vibe", it).apply() },
                             dark, { dark = it; context.getSharedPreferences("fincip_ui", 0).edit().putBoolean("dark", it).apply() },
@@ -892,7 +896,8 @@ private fun FinCipApp(store: FinanceStore, securePrefs: SecurePrefs) {
                             onDashboardOrder = { order -> updateWorkspace { root -> val settings = root.objectOrEmpty("settings"); settings.add("dashboardOrder", JsonArray().apply { order.forEach(::add) }); root.add("settings", settings) } },
                             onPrivacyDefault = { on -> updateWorkspace { root -> val settings = root.objectOrEmpty("settings"); settings.addProperty("privacyMode", on); root.add("settings", settings) } },
                             sound = soundOn, onSound = { soundOn = it; Feedback.sound = it; context.getSharedPreferences("fincip_ui", 0).edit().putBoolean("sfx", it).apply() },
-                            haptic = hapticOn, onHaptic = { hapticOn = it; Feedback.haptic = it; context.getSharedPreferences("fincip_ui", 0).edit().putBoolean("haptic", it).apply() }
+                            haptic = hapticOn, onHaptic = { hapticOn = it; Feedback.haptic = it; context.getSharedPreferences("fincip_ui", 0).edit().putBoolean("haptic", it).apply() },
+                                    section = section
                                 )
                             },
                             securityContent = {

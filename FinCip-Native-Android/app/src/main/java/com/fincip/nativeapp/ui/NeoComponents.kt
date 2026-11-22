@@ -39,6 +39,8 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.graphics.compositeOver
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -56,9 +58,13 @@ import androidx.compose.ui.unit.coerceAtLeast
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
-/** Hard offset shadow colour: ink on light themes, lime on dark ones. */
+/** Hard offset shadow colour: ink on light themes, the accent on dark ones (or always the accent for tinted styles). */
 @Composable
-fun hardShadowColor(): Color = if (MaterialTheme.colorScheme.background.luminance() > 0.5f) Pop.Ink else Pop.Lime
+fun hardShadowColor(): Color {
+    val st = LocalCardStyle.current
+    val scheme = MaterialTheme.colorScheme
+    return if (st.tintedShadow) scheme.primary else if (scheme.background.luminance() > 0.5f) scheme.onBackground else scheme.primary
+}
 
 /** Draws a solid, un-blurred offset shadow behind a rounded shape. */
 fun Modifier.hardShadow(color: Color, radius: Dp, offset: Dp = 4.dp): Modifier = drawBehind {
@@ -66,9 +72,16 @@ fun Modifier.hardShadow(color: Color, radius: Dp, offset: Dp = 4.dp): Modifier =
     drawRoundRect(color, topLeft = Offset(o, o), size = size, cornerRadius = CornerRadius(radius.toPx()))
 }
 
+@Composable
+private fun cardBorderColor(): Color {
+    val st = LocalCardStyle.current
+    val scheme = MaterialTheme.colorScheme
+    return if (st.primaryBorder) scheme.primary else if (st.strongBorder) scheme.outline else scheme.outlineVariant
+}
+
 /**
- * Soft surface: rounded corners, hairline border and a gentle drop shadow. Text inside automatically picks a
- * readable colour for [fill]. Pass a [Pop] colour for a coloured block; default is the plain themed surface.
+ * The app's surface. Its look (corner radius, border, shadow, glass or gradient fill) comes from the active vibe,
+ * so switching vibe changes every card at once. Pass a [Pop] colour in [fill] for a coloured block.
  */
 @Composable
 fun NeoCard(
@@ -76,37 +89,55 @@ fun NeoCard(
     fill: Color = MaterialTheme.colorScheme.surface,
     content: @Composable ColumnScope.() -> Unit
 ) {
-    val shape = RoundedCornerShape(Pop.Radius)
-    CompositionLocalProvider(LocalContentColor provides contentOn(fill)) {
+    val st = LocalCardStyle.current
+    val scheme = MaterialTheme.colorScheme
+    val shape = RoundedCornerShape(st.radius)
+    val plain = fill == scheme.surface
+    val shadowColor = hardShadowColor()
+    var outer = modifier.fillMaxWidth()
+    if (st.shadow == ShadowKind.HARD) outer = outer.padding(end = st.hardOffset, bottom = st.hardOffset).hardShadow(shadowColor, st.radius, st.hardOffset)
+    CompositionLocalProvider(LocalContentColor provides contentOn(if (plain && st.glass) scheme.surface else fill)) {
         Surface(
-            modifier = modifier.fillMaxWidth(),
+            modifier = outer,
             shape = shape,
-            color = fill,
+            color = when { plain && st.gradient -> Color.Transparent; plain && st.glass -> fill.copy(alpha = 0.72f); else -> fill },
             tonalElevation = 0.dp,
-            shadowElevation = 3.dp,
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+            shadowElevation = if (st.shadow == ShadowKind.SOFT) 3.dp else 0.dp,
+            border = if (st.border > 0.dp) BorderStroke(st.border, cardBorderColor()) else null
         ) {
-            Column(Modifier.padding(18.dp), content = content)
+            val inner = if (plain && st.gradient) Modifier.background(Brush.linearGradient(listOf(scheme.surface, scheme.primaryContainer.copy(alpha = 0.55f).compositeOver(scheme.surface)))) else Modifier
+            Column(inner.padding(18.dp), content = content)
         }
     }
 }
 
-/** Primary action: deep-green pill that presses in slightly. */
+/** Primary action. Shape and shadow follow the vibe: pill, rounded rectangle or chunky offset block. */
 @Composable
 fun NeoButton(text: String, modifier: Modifier = Modifier, onClick: () -> Unit, enabled: Boolean = true) {
+    val st = LocalCardStyle.current
+    val scheme = MaterialTheme.colorScheme
     val source = remember { MutableInteractionSource() }
     val pressed by source.collectIsPressedAsState()
     val scale by animateFloatAsState(if (pressed) 0.97f else 1f, tween(90), label = "press")
     val tap = rememberTap()
-    Button(
-        onClick = { tap(); onClick() },
-        enabled = enabled,
-        interactionSource = source,
-        modifier = modifier.scale(scale).height(52.dp),
-        shape = RoundedCornerShape(50),
-        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary, contentColor = MaterialTheme.colorScheme.onPrimary, disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant, disabledContentColor = MaterialTheme.colorScheme.onSurface.copy(alpha = .4f)),
-        elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp, pressedElevation = 0.dp)
-    ) { Text(text, fontWeight = FontWeight.ExtraBold) }
+    val radius = if (st.pill) 50.dp else minOf(st.radius, 16.dp)
+    val hard = st.shadow == ShadowKind.HARD && enabled
+    val shift by animateDpAsState(if (pressed) 0.dp else 3.dp, tween(80), label = "hardPress")
+    val shadow = hardShadowColor()
+    Box(modifier.then(if (hard) Modifier.padding(end = 3.dp, bottom = 3.dp) else Modifier)) {
+        Button(
+            onClick = { tap(); onClick() },
+            enabled = enabled,
+            interactionSource = source,
+            modifier = Modifier.fillMaxWidth().height(52.dp).then(
+                if (hard) Modifier.offset(x = 3.dp - shift, y = 3.dp - shift).hardShadow(shadow, radius, shift) else Modifier.scale(scale)
+            ),
+            shape = RoundedCornerShape(radius),
+            border = if (st.strongBorder && enabled) BorderStroke(st.border, scheme.outline) else if (st.primaryBorder && enabled) BorderStroke(st.border, scheme.primary) else null,
+            colors = ButtonDefaults.buttonColors(containerColor = scheme.primary, contentColor = scheme.onPrimary, disabledContainerColor = scheme.surfaceVariant, disabledContentColor = scheme.onSurface.copy(alpha = .4f)),
+            elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp, pressedElevation = 0.dp)
+        ) { Text(text, fontWeight = FontWeight.ExtraBold) }
+    }
 }
 
 @Composable
@@ -119,7 +150,7 @@ fun NeoOutlineButton(text: String, onClick: () -> Unit, modifier: Modifier = Mod
         onClick = { tap(); onClick() },
         interactionSource = source,
         modifier = modifier.scale(scale).height(48.dp),
-        shape = RoundedCornerShape(50),
+        shape = RoundedCornerShape(if (LocalCardStyle.current.pill) 50.dp else minOf(LocalCardStyle.current.radius, 16.dp)),
         border = BorderStroke(1.2.dp, LocalContentColor.current.copy(alpha = .5f)),
         colors = ButtonDefaults.outlinedButtonColors(contentColor = LocalContentColor.current)
     ) { Text(text, fontWeight = FontWeight.Bold) }
@@ -131,12 +162,14 @@ fun PopChip(text: String, selected: Boolean, onClick: () -> Unit, modifier: Modi
     val bg = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
     val fg = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
     val tap = rememberTap()
+    val st = LocalCardStyle.current
     Surface(
         onClick = { tap(); onClick() },
         modifier = modifier,
-        shape = RoundedCornerShape(50),
+        shape = RoundedCornerShape(if (st.pill) 50.dp else minOf(st.radius, 12.dp)),
         color = bg,
-        contentColor = fg
+        contentColor = fg,
+        border = if (st.strongBorder) BorderStroke(st.border.coerceAtMost(1.5.dp), MaterialTheme.colorScheme.outline) else if (st.primaryBorder) BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = if (selected) 1f else .5f)) else null
     ) {
         Row(Modifier.padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             if (leading != null) Icon(leading, contentDescription = null, modifier = Modifier.size(16.dp))

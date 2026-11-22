@@ -91,7 +91,8 @@ fun ProfileHub(
     accent: String, onAccent: (String) -> Unit,
     appIcon: AppIconOption, onAppIcon: (AppIconOption) -> Unit,
     onBlockScreens: (Boolean) -> Unit,
-    settingsContent: @Composable () -> Unit,
+    vibe: String, onVibe: (String) -> Unit, dark: Boolean, onDark: (Boolean) -> Unit, soundOn: Boolean,
+    settingsContent: @Composable (String) -> Unit,
     securityContent: @Composable () -> Unit
 ) {
     var tab by remember(initialTab) { mutableIntStateOf(initialTab) }
@@ -114,7 +115,7 @@ fun ProfileHub(
                 Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(14.dp)) {
                     when (current) {
                         0 -> ProfileEditor(profile, onProfileChange)
-                        1 -> settingsContent()
+                        1 -> SettingsTab(workspace, vibe, onVibe, dark, onDark, accent, soundOn, { previous = tab; tab = 0 }, { previous = tab; tab = 2 }, settingsContent)
                         2 -> { LockCard(onBlockScreens); securityContent() }
                         else -> CustomizationTab(workspace, onPetChange, accent, onAccent, appIcon, onAppIcon)
                     }
@@ -311,9 +312,17 @@ private fun CustomizationTab(
     val tap = rememberTap()
     NeoCard {
         SectionTitle("App colour")
-        Text("Tints buttons, tabs and headers across the whole app.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .68f))
+        Text("17 colours. Each has a light and a dark version and works with every vibe. \"Vibe\" keeps the theme's own colours.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .68f))
         Spacer(Modifier.height(12.dp))
         Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+            run {
+                val on = accent == "Default"
+                Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.clickable { tap(); onAccent("Default") }) {
+                    Box(Modifier.size(46.dp).clip(CircleShape).background(Brush.linearGradient(listOf(MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.primaryContainer)))
+                        .border(if (on) 3.dp else 1.dp, if (on) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.outline, CircleShape))
+                    Text("Vibe", style = MaterialTheme.typography.labelSmall, fontWeight = if (on) FontWeight.Black else FontWeight.Medium, modifier = Modifier.padding(top = 4.dp))
+                }
+            }
             AccentPresets.forEach { a ->
                 val on = a.name == accent
                 Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.clickable { tap(); onAccent(a.name) }) {
@@ -332,19 +341,20 @@ private fun CustomizationTab(
         SectionTitle("App icon")
         Text("Pick the colour of FinCip on your home screen. It can take a few seconds to update.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .68f))
         Spacer(Modifier.height(12.dp))
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-            AppIcons.options.forEach { o ->
+        AppIcons.options.chunked(5).forEach { rowOpts -> Row(Modifier.fillMaxWidth().padding(bottom = 12.dp), horizontalArrangement = Arrangement.SpaceEvenly) {
+            rowOpts.forEach { o ->
                 val on = o.id == appIcon.id
                 Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.clickable { tap(); onAppIcon(o) }) {
                     Box(
-                        Modifier.size(62.dp).clip(RoundedCornerShape(18.dp)).background(Color(o.bg))
+                        Modifier.size(56.dp).clip(RoundedCornerShape(16.dp)).background(Color(o.bg))
                             .border(if (on) 3.dp else 1.dp, if (on) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline, RoundedCornerShape(18.dp)),
                         contentAlignment = Alignment.Center
-                    ) { FinCipMark(size = 40.dp, glyph = Color(o.leaf), accent = Color(o.shoot)) }
+                    ) { FinCipMark(size = 38.dp, glyph = Color(o.leaf), accent = Color(o.shoot)) }
                     Text(o.label, style = MaterialTheme.typography.labelSmall, fontWeight = if (on) FontWeight.Black else FontWeight.Medium, modifier = Modifier.padding(top = 4.dp))
                 }
             }
-        }
+            repeat(5 - rowOpts.size) { Spacer(Modifier.size(62.dp)) }
+        } }
     }
     Text("Your companion", fontWeight = FontWeight.Black, style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(top = 4.dp))
     PetCustomizer(workspace, onPetChange)

@@ -12,7 +12,13 @@ object AppIcons {
         AppIconOption("classic", "Classic", ".IconClassic", 0xFFF6F5EF, 0xFF171717, 0xFFB9F227),
         AppIconOption("forest", "Forest", ".IconForest", 0xFF1F5C3A, 0xFFF6F5EF, 0xFFB9F227),
         AppIconOption("midnight", "Midnight", ".IconMidnight", 0xFF121212, 0xFFF6F5EF, 0xFFB9F227),
-        AppIconOption("sunrise", "Sunrise", ".IconSunrise", 0xFFF59E3B, 0xFF171717, 0xFFFFFFFF)
+        AppIconOption("sunrise", "Sunrise", ".IconSunrise", 0xFFF59E3B, 0xFF171717, 0xFFFFFFFF),
+        AppIconOption("ocean", "Ocean", ".IconOcean", 0xFF1E7FD8, 0xFFF6F5EF, 0xFFFFD166),
+        AppIconOption("rose", "Rose", ".IconRose", 0xFFF7B6C8, 0xFF5B1530, 0xFFFFFFFF),
+        AppIconOption("violet", "Violet", ".IconViolet", 0xFF5B3FD1, 0xFFF6F5EF, 0xFFFFE066),
+        AppIconOption("slate", "Slate", ".IconSlate", 0xFF37474F, 0xFFECEFF1, 0xFFB9F227),
+        AppIconOption("mint", "Mint", ".IconMint", 0xFFCFF5E7, 0xFF0B3D2E, 0xFFFF7A59),
+        AppIconOption("crimson", "Crimson", ".IconCrimson", 0xFFB3261E, 0xFFFFFFFF, 0xFFFFD166)
     )
 
     private fun component(c: Context, alias: String) = ComponentName(c.packageName, c.packageName + alias)

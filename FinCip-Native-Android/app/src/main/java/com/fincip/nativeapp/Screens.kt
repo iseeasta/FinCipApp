@@ -1120,53 +1120,57 @@ fun SecurityScreen(workspace: JsonObject, onPrivacy: (Boolean) -> Unit, onImport
 }
 
 @Composable
-fun SettingsScreen(workspace: JsonObject, vibe: String, onVibe: (String) -> Unit, dark: Boolean, onDark: (Boolean) -> Unit, onBaseCurrency: (String) -> Unit, onCsv: () -> Unit, onPdf: () -> Unit, dashboardOrder: List<String>, onDashboardOrder: (List<String>) -> Unit, onPrivacyDefault: (Boolean) -> Unit = {}, sound: Boolean = true, onSound: (Boolean) -> Unit = {}, haptic: Boolean = true, onHaptic: (Boolean) -> Unit = {}) {
+fun SettingsScreen(workspace: JsonObject, vibe: String, onVibe: (String) -> Unit, dark: Boolean, onDark: (Boolean) -> Unit, onBaseCurrency: (String) -> Unit, onCsv: () -> Unit, onPdf: () -> Unit, dashboardOrder: List<String>, onDashboardOrder: (List<String>) -> Unit, onPrivacyDefault: (Boolean) -> Unit = {}, sound: Boolean = true, onSound: (Boolean) -> Unit = {}, haptic: Boolean = true, onHaptic: (Boolean) -> Unit = {}, section: String = "all") {
     val base = workspace.objectOrEmpty("settings").string("baseCurrency", "INR")
     val dashboardLabels = mapOf("balance" to "Total balance", "income" to "Monthly income", "expenses" to "Monthly spending", "savings" to "Savings rate")
     val visibleDashboardOrder = (dashboardOrder.filter { it in dashboardLabels.keys }.distinct() + dashboardLabels.keys.filterNot { it in dashboardOrder }).take(4)
     PageColumn {
         PageHeading("MAKE THE APP FEEL LIKE YOURS", "Set your FinCip vibe.", "Theme style, dashboard layout, currency, sound and privacy.")
-        NeoCard {
-            Text("Vibe themes", fontWeight = FontWeight.Black, style = MaterialTheme.typography.titleLarge)
-            listOf("Leaf", "Material You", "Y2K Acid", "Cozy Lo-Fi", "Receipt Paper").forEach { item -> Row(Modifier.fillMaxWidth().clickable { onVibe(item) }.padding(vertical = 7.dp), verticalAlignment = Alignment.CenterVertically) { Text(if (vibe == item) "●" else "○", Modifier.padding(end = 9.dp), color = MaterialTheme.colorScheme.primary); Column(Modifier.weight(1f)) { Text(item, fontWeight = FontWeight.Bold); Text(when (item) { "Material You" -> "Use Android wallpaper colours on Android 12+"; "Y2K Acid" -> "Acid lime, pink and electric blue"; "Cozy Lo-Fi" -> "Warm paper, clay and olive"; else -> "Thermal receipt paper and monospace details" }, style = MaterialTheme.typography.labelSmall) } } }
-            Divider(Modifier.padding(vertical = 6.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) { Text("Dark appearance", Modifier.weight(1f), fontWeight = FontWeight.Bold); FilterChip(selected = dark, onClick = { onDark(!dark) }, label = { Text(if (dark) "Dark" else "Light") }) }
-        }
-        NeoCard {
-            Text("Dashboard layout", fontWeight = FontWeight.Black, style = MaterialTheme.typography.titleLarge)
-            Text("Choose the order of the four summary cards on Home.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .68f))
-            visibleDashboardOrder.forEachIndexed { index, key ->
-                Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text("${index + 1}.", fontWeight = FontWeight.Black, modifier = Modifier.width(28.dp))
-                    Text(dashboardLabels[key] ?: key, Modifier.weight(1f), fontWeight = FontWeight.Bold)
-                    Text("↑", modifier = Modifier.clickable(enabled = index > 0) {
-                        val next = visibleDashboardOrder.toMutableList(); val value = next[index - 1]; next[index - 1] = next[index]; next[index] = value; onDashboardOrder(next)
-                    }.padding(horizontal = 10.dp, vertical = 7.dp), color = if (index > 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = .25f), fontWeight = FontWeight.Black)
-                    Text("↓", modifier = Modifier.clickable(enabled = index < visibleDashboardOrder.lastIndex) {
-                        val next = visibleDashboardOrder.toMutableList(); val value = next[index + 1]; next[index + 1] = next[index]; next[index] = value; onDashboardOrder(next)
-                    }.padding(horizontal = 10.dp, vertical = 7.dp), color = if (index < visibleDashboardOrder.lastIndex) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = .25f), fontWeight = FontWeight.Black)
+        if (section == "all" || section == "dashboard") {
+            NeoCard {
+                Text("Dashboard layout", fontWeight = FontWeight.Black, style = MaterialTheme.typography.titleLarge)
+                Text("Choose the order of the four summary cards on Home.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .68f))
+                visibleDashboardOrder.forEachIndexed { index, key ->
+                    Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text("${index + 1}.", fontWeight = FontWeight.Black, modifier = Modifier.width(28.dp))
+                        Text(dashboardLabels[key] ?: key, Modifier.weight(1f), fontWeight = FontWeight.Bold)
+                        Text("↑", modifier = Modifier.clickable(enabled = index > 0) {
+                            val next = visibleDashboardOrder.toMutableList(); val value = next[index - 1]; next[index - 1] = next[index]; next[index] = value; onDashboardOrder(next)
+                        }.padding(horizontal = 10.dp, vertical = 7.dp), color = if (index > 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = .25f), fontWeight = FontWeight.Black)
+                        Text("↓", modifier = Modifier.clickable(enabled = index < visibleDashboardOrder.lastIndex) {
+                            val next = visibleDashboardOrder.toMutableList(); val value = next[index + 1]; next[index + 1] = next[index]; next[index] = value; onDashboardOrder(next)
+                        }.padding(horizontal = 10.dp, vertical = 7.dp), color = if (index < visibleDashboardOrder.lastIndex) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = .25f), fontWeight = FontWeight.Black)
+                    }
                 }
             }
         }
-        NeoCard {
-            Text("Currency & locale", fontWeight = FontWeight.Black, style = MaterialTheme.typography.titleLarge)
-            Selector("Dashboard currency", base, CURRENCY_INFO.map { it.code }, onBaseCurrency)
-            Text("Add missing conversion assumptions in Money → Currency converter.", style = MaterialTheme.typography.bodySmall)
+        if (section == "all" || section == "currency") {
+            NeoCard {
+                Text("Currency & locale", fontWeight = FontWeight.Black, style = MaterialTheme.typography.titleLarge)
+                Selector("Dashboard currency", base, CURRENCY_INFO.map { it.code }, onBaseCurrency)
+                Text("Add missing conversion assumptions in Money → Currency converter.", style = MaterialTheme.typography.bodySmall)
+            }
         }
-        NeoCard {
-            Text("Sound & touch", fontWeight = FontWeight.Black, style = MaterialTheme.typography.titleLarge)
-            Row(verticalAlignment = Alignment.CenterVertically) { Column(Modifier.weight(1f)) { Text("Tap sounds", fontWeight = FontWeight.Bold); Text("Soft click when you press buttons and tabs.", style = MaterialTheme.typography.bodySmall) }; androidx.compose.material3.Switch(sound, onSound) }
-            Row(verticalAlignment = Alignment.CenterVertically) { Column(Modifier.weight(1f)) { Text("Haptic feedback", fontWeight = FontWeight.Bold); Text("A light vibration on taps.", style = MaterialTheme.typography.bodySmall) }; androidx.compose.material3.Switch(haptic, onHaptic) }
-            Text("Tap sounds also follow your phone's Touch sounds setting.", style = MaterialTheme.typography.labelSmall)
+        if (section == "all" || section == "sound") {
+            NeoCard {
+                Text("Sound & touch", fontWeight = FontWeight.Black, style = MaterialTheme.typography.titleLarge)
+                Row(verticalAlignment = Alignment.CenterVertically) { Column(Modifier.weight(1f)) { Text("Tap sounds", fontWeight = FontWeight.Bold); Text("Soft click when you press buttons and tabs.", style = MaterialTheme.typography.bodySmall) }; androidx.compose.material3.Switch(sound, onSound) }
+                Row(verticalAlignment = Alignment.CenterVertically) { Column(Modifier.weight(1f)) { Text("Haptic feedback", fontWeight = FontWeight.Bold); Text("A light vibration on taps.", style = MaterialTheme.typography.bodySmall) }; androidx.compose.material3.Switch(haptic, onHaptic) }
+                Text("Tap sounds also follow your phone's Touch sounds setting.", style = MaterialTheme.typography.labelSmall)
+            }
         }
-        NeoCard {
-            Text("Privacy defaults", fontWeight = FontWeight.Black, style = MaterialTheme.typography.titleLarge)
-            val privacyOn = workspace.objectOrEmpty("settings").bool("privacyMode")
-            Row(verticalAlignment = Alignment.CenterVertically) { Column(Modifier.weight(1f)) { Text("Hide amounts", fontWeight = FontWeight.Bold); Text("Mask balances and totals on every screen.", style = MaterialTheme.typography.bodySmall) }; androidx.compose.material3.Switch(privacyOn, onPrivacyDefault) }
+        if (section == "all" || section == "privacy") {
+            NeoCard {
+                Text("Privacy defaults", fontWeight = FontWeight.Black, style = MaterialTheme.typography.titleLarge)
+                val privacyOn = workspace.objectOrEmpty("settings").bool("privacyMode")
+                Row(verticalAlignment = Alignment.CenterVertically) { Column(Modifier.weight(1f)) { Text("Hide amounts", fontWeight = FontWeight.Bold); Text("Mask balances and totals on every screen.", style = MaterialTheme.typography.bodySmall) }; androidx.compose.material3.Switch(privacyOn, onPrivacyDefault) }
+            }
         }
-        NeoCard {
-            Text("Portable reports", fontWeight = FontWeight.Black, style = MaterialTheme.typography.titleLarge)
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { NeoOutlineButton("Export CSV", onCsv, Modifier.weight(1f)); NeoButton("Save PDF", onClick = onPdf, modifier = Modifier.weight(1f)) }
+        if (section == "all" || section == "data") {
+            NeoCard {
+                Text("Portable reports", fontWeight = FontWeight.Black, style = MaterialTheme.typography.titleLarge)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { NeoOutlineButton("Export CSV", onCsv, Modifier.weight(1f)); NeoButton("Save PDF", onClick = onPdf, modifier = Modifier.weight(1f)) }
+            }
         }
         Text("Clarity over complexity · FinCip Native", style = MaterialTheme.typography.labelSmall)
     }
