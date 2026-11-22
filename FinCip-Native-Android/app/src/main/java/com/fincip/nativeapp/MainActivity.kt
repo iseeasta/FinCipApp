@@ -41,6 +41,19 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.semantics.Role
 import com.fincip.nativeapp.ui.Pop
+import com.fincip.nativeapp.ui.FinCipInk
+import com.fincip.nativeapp.ui.FinCipMark
+import com.fincip.nativeapp.ui.FinCipSidebar
+import com.fincip.nativeapp.ui.SidebarCollapsedWidth
+import com.fincip.nativeapp.ui.SidebarExpandedWidth
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.width
+import androidx.compose.ui.platform.LocalConfiguration
 import com.fincip.nativeapp.ui.PopField
 import com.fincip.nativeapp.ui.PopChip
 import androidx.compose.foundation.layout.padding
@@ -185,6 +198,7 @@ private fun FinCipApp(store: FinanceStore, securePrefs: SecurePrefs) {
     var dark by remember { mutableStateOf(context.getSharedPreferences("fincip_ui", 0).getBoolean("dark", false)) }
     var page by remember { mutableStateOf("overview") }
     var group by remember { mutableStateOf("Home") }
+    var sidebarExpanded by remember { mutableStateOf(context.resources.configuration.screenWidthDp >= 600 && context.getSharedPreferences("fincip_ui", 0).getBoolean("sidebar_expanded", true)) }
     var month by remember { mutableStateOf(currentMonth()) }
     var showEntry by remember { mutableStateOf(false) }
     var showBackupPassword by remember { mutableStateOf(false) }
@@ -659,13 +673,26 @@ private fun FinCipApp(store: FinanceStore, securePrefs: SecurePrefs) {
             }
         }
         if (loading) {
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("FinCip is opening your money space…", fontWeight = FontWeight.Bold) }
+            Box(Modifier.fillMaxSize().background(FinCipInk), contentAlignment = Alignment.Center) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                    FinCipMark(size = 88.dp)
+                    Text("FinCip", color = Color(0xFFF3F0E7), fontWeight = FontWeight.Black, fontSize = 30.sp, letterSpacing = (-1).sp)
+                    Text("OPENING YOUR MONEY SPACE", color = Color(0xFFF3F0E7).copy(alpha = .55f), style = MaterialTheme.typography.labelSmall, letterSpacing = 1.6.sp)
+                }
+            }
         } else {
             val privacy = workspace.objectOrEmpty("settings").bool("privacyMode")
             val monthIncome = incomeTotal(workspace, month)
             val monthExpenses = expenseTotal(workspace, month)
             val balance = incomeTotal(workspace) - expenseTotal(workspace)
             val savingsRate = if (monthIncome > 0) (monthIncome - monthExpenses) / monthIncome * 100 else 0.0
+            val wide = LocalConfiguration.current.screenWidthDp >= 600
+            val sidebarW by animateDpAsState(if (sidebarExpanded) SidebarExpandedWidth else SidebarCollapsedWidth, tween(260, easing = FastOutSlowInEasing), label = "sidebarWidth")
+            androidx.activity.compose.BackHandler(enabled = !wide && sidebarExpanded) { sidebarExpanded = false }
+            Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+              Row(Modifier.fillMaxSize()) {
+                Spacer(Modifier.width(if (wide) sidebarW else SidebarCollapsedWidth))
+                Box(Modifier.weight(1f)) {
             Scaffold(
                 containerColor = MaterialTheme.colorScheme.background,
                 contentWindowInsets = WindowInsets(0, 0, 0, 0),
@@ -675,9 +702,8 @@ private fun FinCipApp(store: FinanceStore, securePrefs: SecurePrefs) {
                         Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Box(Modifier.size(44.dp).background(Pop.Sun, CircleShape), contentAlignment = Alignment.Center) { Text("FC", color = Pop.Ink, fontWeight = FontWeight.Black, fontSize = 16.sp) }
                         Column(Modifier.weight(1f).padding(start = 4.dp)) {
-                            Text("FinCip", fontWeight = FontWeight.Black, fontSize = 22.sp, letterSpacing = (-0.5).sp, maxLines = 1)
+                            Text(NAV_PAGES.firstOrNull { it.id == page }?.title ?: "FinCip", fontWeight = FontWeight.Black, fontSize = 22.sp, letterSpacing = (-0.5).sp, maxLines = 1)
                             Text(LocalDate.now().format(DateTimeFormatter.ofPattern("EEE, d MMM", Locale.ENGLISH)).uppercase(), style = MaterialTheme.typography.labelSmall, letterSpacing = 1.2.sp, color = MaterialTheme.colorScheme.onBackground.copy(alpha = .6f), maxLines = 1)
                         }
                         val chipBg = MaterialTheme.colorScheme.surface
@@ -685,7 +711,6 @@ private fun FinCipApp(store: FinanceStore, securePrefs: SecurePrefs) {
                         IconButton(modifier = Modifier.size(42.dp).background(chipBg, CircleShape), onClick = { updateWorkspace { root -> val settings = root.objectOrEmpty("settings"); settings.addProperty("privacyMode", !settings.bool("privacyMode")); root.add("settings", settings) } }) { Icon(if (privacy) Icons.Default.VisibilityOff else Icons.Default.Visibility, contentDescription = "Toggle privacy", modifier = Modifier.size(20.dp)) }
                         IconButton(modifier = Modifier.size(42.dp).background(chipBg, CircleShape), onClick = { dark = !dark; context.getSharedPreferences("fincip_ui", 0).edit().putBoolean("dark", dark).apply() }) { Icon(if (dark) Icons.Default.LightMode else Icons.Default.DarkMode, contentDescription = "Toggle theme", modifier = Modifier.size(20.dp)) }
                     }
-                    PillNav(selected = group) { g -> group = g; page = NAV_PAGES.first { it.group == g }.id }
                     Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                         MonthMenu(month) { month = it }
                         NAV_PAGES.filter { it.group == group }.forEach { item ->
@@ -834,6 +859,18 @@ private fun FinCipApp(store: FinanceStore, securePrefs: SecurePrefs) {
                     }
                     }
                 }
+            }
+                }
+              }
+              AnimatedVisibility(visible = !wide && sidebarExpanded, enter = fadeIn(tween(200)), exit = fadeOut(tween(200))) {
+                  Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = .5f)).clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { sidebarExpanded = false })
+              }
+              FinCipSidebar(
+                  pages = NAV_PAGES, selectedPage = page, expanded = sidebarExpanded, width = sidebarW,
+                  onToggle = { sidebarExpanded = !sidebarExpanded; if (wide) context.getSharedPreferences("fincip_ui", 0).edit().putBoolean("sidebar_expanded", sidebarExpanded).apply() },
+                  onSelect = { target -> group = target.group; page = target.id; if (!wide) sidebarExpanded = false },
+                  modifier = Modifier.align(Alignment.TopStart)
+              )
             }
         }
     }
@@ -1259,36 +1296,4 @@ private fun writePdfReport(context: android.content.Context, uri: Uri, workspace
     doc.finishPage(page)
     context.contentResolver.openOutputStream(uri)?.use { doc.writeTo(it) }
     doc.close()
-}
-
-
-/** Dark pill navigation pinned under the header. The active tab expands into a sun-yellow capsule with its label. */
-@Composable
-private fun PillNav(selected: String, onSelect: (String) -> Unit) {
-    val items = listOf("Home" to Icons.Default.Home, "Money" to Icons.Default.Wallet, "Plan" to Icons.Default.Star, "Explore" to Icons.Default.Explore)
-    val isDark = MaterialTheme.colorScheme.background.luminance() < 0.3f
-    val pillColor = if (isDark) Color(0xFF110E26) else Pop.Ink
-    val pill = RoundedCornerShape(50)
-    Box(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)) {
-        Row(
-            Modifier.fillMaxWidth().shadow(8.dp, pill).background(pillColor, pill).padding(6.dp),
-            horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically
-        ) {
-            items.forEach { (name, icon) ->
-                val active = name == selected
-                val bg by animateColorAsState(if (active) Pop.Sun else Color.Transparent, tween(200), label = "navBg")
-                val fg by animateColorAsState(if (active) Pop.Ink else Pop.Cream.copy(alpha = .75f), tween(200), label = "navFg")
-                Row(
-                    Modifier.clip(pill).background(bg).clickable(role = Role.Tab) { onSelect(name) }.animateContentSize().padding(horizontal = if (active) 16.dp else 13.dp, vertical = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(icon, contentDescription = name, tint = fg, modifier = Modifier.size(22.dp))
-                    if (active) {
-                        Spacer(Modifier.width(7.dp))
-                        Text(name, color = fg, fontWeight = FontWeight.Black, style = MaterialTheme.typography.labelLarge, maxLines = 1)
-                    }
-                }
-            }
-        }
-    }
 }
