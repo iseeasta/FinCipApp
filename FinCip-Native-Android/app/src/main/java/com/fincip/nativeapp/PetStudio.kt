@@ -64,7 +64,7 @@ fun petProgress(workspace: JsonObject): PetProgress {
 fun petLookOf(m: JsonObject): PetLook {
     fun i(key: String, def: Int) = if (m.has(key) && !m.get(key).isJsonNull) m.double(key).toInt() else def
     return PetLook(
-        girl = m.string("gender", "girl") != "boy",
+        species = if (m.has("species")) i("species", 0) else if (m.string("gender", "girl") == "boy") 1 else 0, eyeColor = i("eyeColor", 0), freckles = m.has("freckles") && m.bool("freckles"), mouth = i("mouth", 0), brows = i("brows", 0),
         skin = i("skin", 1), hairStyle = i("hairStyle", 0), hairColor = i("hairColor", 1), outfitStyle = i("outfitStyle", 0),
         outfitColor = i("outfitColor", 0), accessory = i("accessory", 0), background = i("background", 0), eyes = i("eyes", 0),
         blush = if (m.has("blush")) m.bool("blush") else true
@@ -156,15 +156,26 @@ fun PetCustomizer(workspace: JsonObject, onChange: (JsonObject.() -> Unit) -> Un
     NeoCard {
         PopField(name, { name = it; if (it.isNotBlank()) onChange { addProperty("name", it.take(20)) } }, Modifier.fillMaxWidth(), label = { Text("Pet name") }, singleLine = true)
         StudioLabel("Character")
-        ChoiceRow(listOf("Girl", "Boy"), if (look.girl) 0 else 1, { i -> onChange { addProperty("gender", if (i == 0) "girl" else "boy") } })
-        StudioLabel("Skin tone")
-        Swatches(PetOptions.skins, look.skin) { i -> onChange { addProperty("skin", i) } }
-        StudioLabel("Hair style")
-        ChoiceRow(PetOptions.hairStyles, look.hairStyle, { i -> onChange { addProperty("hairStyle", i) } })
-        StudioLabel("Hair colour")
+        ChoiceRow(PetOptions.species, look.species, { i -> onChange { addProperty("species", i); addProperty("gender", if (i == 1) "boy" else "girl") } })
+        StudioLabel(if (look.species >= 2) "Fur / body colour" else "Skin tone")
+        if (look.species != 6) Swatches(if (look.species >= 2) PetOptions.furs else PetOptions.skins, look.skin) { i -> onChange { addProperty("skin", i) } }
+        else Text("Pandas keep their classic black and white.", style = MaterialTheme.typography.bodySmall)
+        if (look.species < 2) {
+            StudioLabel("Hair style")
+            ChoiceRow(PetOptions.hairStyles, look.hairStyle, { i -> onChange { addProperty("hairStyle", i) } })
+        }
+        StudioLabel(if (look.species < 2) "Hair & brow colour" else "Brow colour")
         Swatches(PetOptions.hairColors, look.hairColor) { i -> onChange { addProperty("hairColor", i) } }
-        StudioLabel("Eyes")
+        StudioLabel("Eye shape")
         ChoiceRow(PetOptions.eyeStyles, look.eyes, { i -> onChange { addProperty("eyes", i) } })
+        StudioLabel("Eye colour")
+        Swatches(PetOptions.eyeColors, look.eyeColor) { i -> onChange { addProperty("eyeColor", i) } }
+        StudioLabel("Eyebrows")
+        ChoiceRow(PetOptions.brows, look.brows, { i -> onChange { addProperty("brows", i) } })
+        StudioLabel("Mouth")
+        ChoiceRow(PetOptions.mouths, look.mouth, { i -> onChange { addProperty("mouth", i) } })
+        StudioLabel("Freckles")
+        ChoiceRow(listOf("Off", "On"), if (look.freckles) 1 else 0, { i -> onChange { addProperty("freckles", i == 1) } })
         StudioLabel("Cheeks")
         ChoiceRow(listOf("Blush on", "Blush off"), if (look.blush) 0 else 1, { i -> onChange { addProperty("blush", i == 0) } })
     }
