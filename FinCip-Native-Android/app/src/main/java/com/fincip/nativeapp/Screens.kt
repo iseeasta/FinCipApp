@@ -813,7 +813,7 @@ fun InsightsScreen(workspace: JsonObject, month: String, privacy: Boolean) {
 fun RulesScreen(workspace: JsonObject, onAdd: () -> Unit, onApply: () -> Unit, onDelete: (JsonObject) -> Unit) {
     PageColumn {
         PageHeading("AUTOMATE THE BORING BITS", "Smart categorization rules.", "Rules match words in transaction titles and update their categories on your request.")
-        DataStory("Rule coverage", "How many rules are ready to classify entries", listOf("Rules" to workspace.arrayOrEmpty("smartRules").size.toDouble(), "Transactions" to transactions(workspace).size.toDouble()), "COUNT")
+        DataStory("Rule coverage", "How many rules are ready to classify entries", listOf("Rules" to workspace.arrayOrEmpty("smartRules").size().toDouble(), "Transactions" to transactions(workspace).size.toDouble()), "COUNT")
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { NeoButton("+ Add rule", Modifier.weight(1f), onAdd); NeoOutlineButton("Apply rules", onApply, Modifier.weight(1f)) }
         workspace.arrayOrEmpty("smartRules").objects().forEach { rule -> NeoCard { Row(verticalAlignment = Alignment.CenterVertically) { Column(Modifier.weight(1f)) { Text("Contains: ${rule.string("keyword")}", fontWeight = FontWeight.Black); Text("Set category → ${rule.string("category")}", style = MaterialTheme.typography.bodySmall) }; Text("×", modifier = Modifier.clickable { onDelete(rule) }.padding(8.dp)) } } }
     }
@@ -823,7 +823,7 @@ fun RulesScreen(workspace: JsonObject, onAdd: () -> Unit, onApply: () -> Unit, o
 fun ReceiptScreen(workspace: JsonObject, onAdd: () -> Unit, onOpen: (JsonObject) -> Unit, onDelete: (JsonObject) -> Unit) {
     PageColumn {
         PageHeading("KEEP THE PAPER TRAIL", "Receipts, safely stored.", "Choose a photo, image or PDF. Files are copied into this app's private storage.")
-        DataStory("Receipt vault", "Your locally saved proof of purchase", listOf("Saved" to workspace.arrayOrEmpty("receipts").size.toDouble(), "Transactions" to transactions(workspace).size.toDouble()), "COUNT")
+        DataStory("Receipt vault", "Your locally saved proof of purchase", listOf("Saved" to workspace.arrayOrEmpty("receipts").size().toDouble(), "Transactions" to transactions(workspace).size.toDouble()), "COUNT")
         NeoButton("+ Add receipt / invoice", onClick = onAdd)
         val receipts = workspace.arrayOrEmpty("receipts").objects()
         if (receipts.isEmpty()) NeoCard { Text("Your receipt vault is empty", fontWeight = FontWeight.Black); Text("Add a receipt to keep proof of purchase close to your records.", style = MaterialTheme.typography.bodySmall) }
@@ -836,7 +836,7 @@ fun SecurityScreen(workspace: JsonObject, onPrivacy: (Boolean) -> Unit, onImport
     val privacy = workspace.objectOrEmpty("settings").bool("privacyMode")
     PageColumn {
         PageHeading("YOUR DATA, YOUR KEYS", "Private by design.", "Your local workspace is encrypted with an Android Keystore key. Exported backups are password encrypted.")
-        DataStory("Local data footprint", "Records currently stored in this workspace", listOf("Transactions" to transactions(workspace).size.toDouble(), "Budgets" to workspace.arrayOrEmpty("budgets").size.toDouble(), "Goals" to workspace.arrayOrEmpty("goals").size.toDouble(), "Receipts" to workspace.arrayOrEmpty("receipts").size.toDouble()), "COUNT")
+        DataStory("Local data footprint", "Records currently stored in this workspace", listOf("Transactions" to transactions(workspace).size.toDouble(), "Budgets" to workspace.arrayOrEmpty("budgets").size().toDouble(), "Goals" to workspace.arrayOrEmpty("goals").size().toDouble(), "Receipts" to workspace.arrayOrEmpty("receipts").size().toDouble()), "COUNT")
         NeoCard {
             Row(verticalAlignment = Alignment.CenterVertically) { Column(Modifier.weight(1f)) { Text("Privacy mode", fontWeight = FontWeight.Black); Text("Mask financial amounts on screen.", style = MaterialTheme.typography.bodySmall) }; FilterChip(selected = privacy, onClick = { onPrivacy(!privacy) }, label = { Text(if (privacy) "ON" else "OFF") }) }
         }
