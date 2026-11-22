@@ -459,7 +459,7 @@ private fun Dot(color: Color) { Box(Modifier.size(7.dp).clip(RoundedCornerShape(
 private fun LegendDot(color: Color, label: String) { Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) { Dot(color); Text(label, style = MaterialTheme.typography.labelSmall) } }
 
 @Composable
-fun CurrencyScreen(workspace: JsonObject, update: ((JsonObject) -> Unit) -> Unit, onRefreshRates: () -> Unit, refreshing: Boolean) {
+fun CurrencyScreen(workspace: JsonObject, applyChange: ((JsonObject) -> Unit) -> Unit, onRefreshRates: () -> Unit, refreshing: Boolean) {
     var amount by remember { mutableStateOf("1") }
     var from by remember { mutableStateOf("INR") }
     var to by remember { mutableStateOf("USD") }
@@ -498,7 +498,7 @@ fun CurrencyScreen(workspace: JsonObject, update: ((JsonObject) -> Unit) -> Unit
                     PopField(value = text, onValueChange = { text = it }, modifier = Modifier.width(140.dp), singleLine = true, label = { Text("INR for 1 unit") }, enabled = info.code != "INR")
                     TextButtonTiny("Save") {
                         val v = text.toDoubleOrNull() ?: return@TextButtonTiny
-                        update { root -> val s = root.objectOrEmpty("settings"); val fx = s.objectOrEmpty("fxRates"); fx.addProperty(info.code, if (info.code == "INR") 1.0 else v); s.add("fxRates", fx); root.add("settings", s) }
+                        applyChange { root: JsonObject -> val s = root.objectOrEmpty("settings"); val fx = s.objectOrEmpty("fxRates"); fx.addProperty(info.code, if (info.code == "INR") 1.0 else v); s.add("fxRates", fx); root.add("settings", s) }
                     }
                 }
                 Divider(Modifier.padding(vertical = 5.dp))
