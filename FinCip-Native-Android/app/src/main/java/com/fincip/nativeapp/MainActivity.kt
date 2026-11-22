@@ -195,8 +195,8 @@ private fun FinCipApp(store: FinanceStore, securePrefs: SecurePrefs) {
     var vibe by remember {
         val sp = context.getSharedPreferences("fincip_ui", 0)
         // One-time switch so existing installs land on the new look; the user can still change it in Settings.
-        if (!sp.getBoolean("pop_v1", false)) { sp.edit().putString("vibe", "Pastel Pop").putBoolean("pop_v1", true).apply() }
-        mutableStateOf(sp.getString("vibe", "Pastel Pop") ?: "Pastel Pop")
+        if (!sp.getBoolean("brut_v1", false)) { sp.edit().putString("vibe", "Brutalist Lime").putBoolean("brut_v1", true).apply() }
+        mutableStateOf(sp.getString("vibe", "Brutalist Lime") ?: "Brutalist Lime")
     }
     var dark by remember { mutableStateOf(context.getSharedPreferences("fincip_ui", 0).getBoolean("dark", false)) }
     var page by remember { mutableStateOf("overview") }
@@ -314,7 +314,7 @@ private fun FinCipApp(store: FinanceStore, securePrefs: SecurePrefs) {
         taxAgeGroup = importedTax.string("ageGroup", "below60")
         taxResident = importedTax.bool("resident", true)
         val importedVibe = next.objectOrEmpty("settings").string("vibeTheme", "Material You")
-        if (importedVibe in listOf("Pastel Pop", "Material You", "System", "Y2K Acid", "Cozy Lo-Fi", "Receipt Paper")) {
+        if (importedVibe in listOf("Brutalist Lime", "Pastel Pop", "Material You", "System", "Y2K Acid", "Cozy Lo-Fi", "Receipt Paper")) {
             vibe = if (importedVibe == "System") "Material You" else importedVibe
             context.getSharedPreferences("fincip_ui", 0).edit().putString("vibe", vibe).apply()
         }

@@ -17,6 +17,11 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.offset
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -51,9 +56,19 @@ import androidx.compose.ui.unit.coerceAtLeast
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
+/** Hard offset shadow colour: ink on light themes, lime on dark ones. */
+@Composable
+fun hardShadowColor(): Color = if (MaterialTheme.colorScheme.background.luminance() > 0.5f) Pop.Ink else Pop.Lime
+
+/** Draws a solid, un-blurred offset shadow behind a rounded shape. */
+fun Modifier.hardShadow(color: Color, radius: Dp, offset: Dp = 4.dp): Modifier = drawBehind {
+    val o = offset.toPx()
+    drawRoundRect(color, topLeft = Offset(o, o), size = size, cornerRadius = CornerRadius(radius.toPx()))
+}
+
 /**
- * Soft colour-block surface. Text inside automatically picks a readable colour for [fill].
- * Pass a [Pop] colour for a coloured block; default is the plain themed surface.
+ * Brutalist surface: thin ink border and hard offset shadow. Text inside automatically picks a readable
+ * colour for [fill]. Pass a [Pop] colour for a coloured block; default is the plain themed surface.
  */
 @Composable
 fun NeoCard(
@@ -64,46 +79,50 @@ fun NeoCard(
     val shape = RoundedCornerShape(Pop.Radius)
     CompositionLocalProvider(LocalContentColor provides contentOn(fill)) {
         Surface(
-            modifier = modifier.fillMaxWidth(),
+            modifier = modifier.fillMaxWidth().padding(end = 4.dp, bottom = 4.dp).hardShadow(hardShadowColor(), Pop.Radius),
             shape = shape,
             color = fill,
             tonalElevation = 0.dp,
             shadowElevation = 0.dp,
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = if (fill == MaterialTheme.colorScheme.surface) 1f else 0f))
+            border = BorderStroke(1.5.dp, MaterialTheme.colorScheme.outline)
         ) {
             Column(Modifier.padding(18.dp), content = content)
         }
     }
 }
 
-/** Primary action: dark pill with a physical press (scales down). */
+/** Primary action: lime block, ink border, hard shadow that collapses on press. */
 @Composable
 fun NeoButton(text: String, modifier: Modifier = Modifier, onClick: () -> Unit, enabled: Boolean = true) {
     val source = remember { MutableInteractionSource() }
     val pressed by source.collectIsPressedAsState()
-    val scale by animateFloatAsState(if (pressed) 0.96f else 1f, tween(90), label = "press")
-    Button(
-        onClick = onClick,
-        enabled = enabled,
-        interactionSource = source,
-        modifier = modifier.scale(scale).height(52.dp),
-        shape = RoundedCornerShape(50),
-        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary, contentColor = MaterialTheme.colorScheme.onPrimary),
-        elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp, pressedElevation = 0.dp)
-    ) { Text(text, fontWeight = FontWeight.ExtraBold) }
+    val shift by animateDpAsState(if (pressed) 0.dp else 3.dp, tween(80), label = "press")
+    val shadow = hardShadowColor()
+    Box(modifier.padding(end = 3.dp, bottom = 3.dp)) {
+        Button(
+            onClick = onClick,
+            enabled = enabled,
+            interactionSource = source,
+            modifier = Modifier.fillMaxWidth().height(52.dp).offset(x = 3.dp - shift, y = 3.dp - shift).hardShadow(if (enabled) shadow else Color.Transparent, 14.dp, shift),
+            shape = RoundedCornerShape(14.dp),
+            border = BorderStroke(1.5.dp, if (enabled) MaterialTheme.colorScheme.outline else Color.Transparent),
+            colors = ButtonDefaults.buttonColors(containerColor = Pop.Lime, contentColor = Pop.Ink, disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant, disabledContentColor = MaterialTheme.colorScheme.onSurface.copy(alpha = .4f)),
+            elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp, pressedElevation = 0.dp)
+        ) { Text(text, fontWeight = FontWeight.ExtraBold) }
+    }
 }
 
 @Composable
 fun NeoOutlineButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
     val source = remember { MutableInteractionSource() }
     val pressed by source.collectIsPressedAsState()
-    val scale by animateFloatAsState(if (pressed) 0.96f else 1f, tween(90), label = "press")
+    val scale by animateFloatAsState(if (pressed) 0.97f else 1f, tween(90), label = "press")
     OutlinedButton(
         onClick = onClick,
         interactionSource = source,
         modifier = modifier.scale(scale).height(48.dp),
-        shape = RoundedCornerShape(50),
-        border = BorderStroke(1.5.dp, LocalContentColor.current.copy(alpha = .55f)),
+        shape = RoundedCornerShape(14.dp),
+        border = BorderStroke(1.5.dp, LocalContentColor.current),
         colors = ButtonDefaults.outlinedButtonColors(contentColor = LocalContentColor.current)
     ) { Text(text, fontWeight = FontWeight.Bold) }
 }
@@ -111,15 +130,15 @@ fun NeoOutlineButton(text: String, onClick: () -> Unit, modifier: Modifier = Mod
 /** Selectable pill used for category/filter rows. Selected = dark ink fill. */
 @Composable
 fun PopChip(text: String, selected: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier, leading: ImageVector? = null) {
-    val bg = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface
-    val fg = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
+    val bg = if (selected) Pop.Lime else MaterialTheme.colorScheme.surface
+    val fg = if (selected) Pop.Ink else MaterialTheme.colorScheme.onSurface
     Surface(
         onClick = onClick,
         modifier = modifier,
-        shape = RoundedCornerShape(50),
+        shape = RoundedCornerShape(12.dp),
         color = bg,
         contentColor = fg,
-        border = if (selected) null else BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+        border = BorderStroke(1.5.dp, MaterialTheme.colorScheme.outline)
     ) {
         Row(Modifier.padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             if (leading != null) Icon(leading, contentDescription = null, modifier = Modifier.size(16.dp))

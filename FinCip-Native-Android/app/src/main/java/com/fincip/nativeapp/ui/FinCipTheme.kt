@@ -22,22 +22,26 @@ import com.fincip.nativeapp.R
 import androidx.compose.ui.unit.sp
 
 
-/** FinCip "Pastel Pop" design tokens: soft colour-blocking, big radii, ink-dark accents. */
+/**
+ * FinCip "Brutalist Lime" design tokens. Legacy colour names (Coral, Teal, ...) are kept so every screen
+ * re-themes at once: Sun = lime accent, Teal = positive green, Coral = restrained red, Lavender/Peach = muted bone blocks.
+ */
 object Pop {
-    val Cream = Color(0xFFFFF8E1)
-    val Ink = Color(0xFF1E1B2E)
-    val Coral = Color(0xFFF26D85)
-    val Teal = Color(0xFF2E8C7F)
-    val Sun = Color(0xFFF7B733)
-    val Lavender = Color(0xFFB7A8F5)
-    val Peach = Color(0xFFF8A66B)
-    val Mint = Color(0xFFCFEBD8)
-    val Indigo = Color(0xFF26214A)
-    val IndigoHi = Color(0xFF332D63)
-    val Gain = Color(0xFF1F9D63)
-    val Loss = Color(0xFFE5484D)
-    val Radius = 28.dp
-    val RadiusSmall = 18.dp
+    val Cream = Color(0xFFF6F5EF)
+    val Ink = Color(0xFF171717)
+    val Lime = Color(0xFFB9F227)
+    val Coral = Color(0xFFD66B67)
+    val Teal = Color(0xFF4F9B69)
+    val Sun = Lime
+    val Lavender = Color(0xFFEAECE3)
+    val Peach = Color(0xFFDDE3CF)
+    val Mint = Color(0xFFE3F7A6)
+    val Indigo = Color(0xFF121212)
+    val IndigoHi = Color(0xFF1F1F1D)
+    val Gain = Color(0xFF4F9B69)
+    val Loss = Color(0xFFD66B67)
+    val Radius = 20.dp
+    val RadiusSmall = 14.dp
 }
 
 /** Bundled Plus Jakarta Sans: friendly geometric sans used across the whole app. */
@@ -59,22 +63,22 @@ private fun popLight() = lightColorScheme(
     tertiary = Pop.Teal, onTertiary = Color.White,
     background = Pop.Cream, onBackground = Pop.Ink,
     surface = Color.White, onSurface = Pop.Ink,
-    surfaceVariant = Color(0xFFF3ECCB), onSurfaceVariant = Color(0xFF4A4660),
-    secondaryContainer = Color(0xFFFFE08A), onSecondaryContainer = Pop.Ink,
-    primaryContainer = Pop.Lavender, onPrimaryContainer = Pop.Ink,
-    outline = Color(0xFFCFC8A8), outlineVariant = Color(0xFFE6DFBC)
+    surfaceVariant = Color(0xFFEAECE3), onSurfaceVariant = Color(0xFF3B3B36),
+    secondaryContainer = Pop.Mint, onSecondaryContainer = Pop.Ink,
+    primaryContainer = Pop.Lime, onPrimaryContainer = Pop.Ink,
+    outline = Pop.Ink, outlineVariant = Color(0xFFCBCDC0)
 )
 
 private fun popDark() = darkColorScheme(
-    primary = Color(0xFFF6C98D), onPrimary = Pop.Ink,
+    primary = Pop.Lime, onPrimary = Pop.Ink,
     secondary = Pop.Coral, onSecondary = Color.White,
     tertiary = Pop.Teal, onTertiary = Color.White,
     background = Pop.Indigo, onBackground = Pop.Cream,
     surface = Pop.IndigoHi, onSurface = Pop.Cream,
-    surfaceVariant = Color(0xFF3D3775), onSurfaceVariant = Color(0xFFD9D3F2),
-    secondaryContainer = Color(0xFF4C4488), onSecondaryContainer = Pop.Cream,
-    primaryContainer = Color(0xFF5A4FA3), onPrimaryContainer = Pop.Cream,
-    outline = Color(0xFF5B5499), outlineVariant = Color(0xFF443E7D)
+    surfaceVariant = Color(0xFF2B2B28), onSurfaceVariant = Color(0xFFD8D8CE),
+    secondaryContainer = Color(0xFF34402A), onSecondaryContainer = Pop.Cream,
+    primaryContainer = Color(0xFF3E5210), onPrimaryContainer = Pop.Cream,
+    outline = Color(0xFF8C8C82), outlineVariant = Color(0xFF3A3A36)
 )
 
 @Composable
@@ -84,7 +88,7 @@ fun FinCipTheme(vibe: String, dark: Boolean, content: @Composable () -> Unit) {
     val useDark = dark || ((vibe == "System" || vibe == "Material You") && systemDark)
 
     val scheme = when (vibe) {
-        "Pastel Pop" -> if (useDark) popDark() else popLight()
+        "Pastel Pop", "Brutalist Lime" -> if (useDark) popDark() else popLight()
         "Material You", "System" -> if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             if (useDark) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
         } else if (useDark) fallbackDark() else fallbackLight()

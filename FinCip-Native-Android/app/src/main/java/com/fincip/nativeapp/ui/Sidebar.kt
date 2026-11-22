@@ -153,7 +153,7 @@ fun FinCipSidebar(
         modifier.width(SidebarWidth).fillMaxHeight(),
         shape = RoundedCornerShape(topEnd = 28.dp, bottomEnd = 28.dp),
         color = scheme.surface, shadowElevation = 14.dp,
-        border = BorderStroke(1.dp, scheme.outlineVariant)
+        border = BorderStroke(1.5.dp, scheme.outline)
     ) {
         Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().padding(horizontal = 14.dp, vertical = 12.dp)) {
             // Logo row: same place as the page-header logo, so tapping it feels like one control.
@@ -222,15 +222,15 @@ private fun SectionLabel(text: String) {
 @Composable
 private fun TopItem(icon: ImageVector, label: String, selected: Boolean, trailing: Boolean? = null, onClick: () -> Unit) {
     val scheme = MaterialTheme.colorScheme
-    val bg by animateColorAsState(if (selected) scheme.surfaceVariant else Color.Transparent, tween(160), label = "tiBg")
+    val bg by animateColorAsState(if (selected) Pop.Lime else Color.Transparent, tween(160), label = "tiBg")
     val rotation by animateFloatAsState(if (trailing == true) 180f else 0f, tween(200), label = "chev")
     Row(
         Modifier.fillMaxWidth().height(46.dp).clip(RoundedCornerShape(14.dp)).background(bg).clickable(role = Role.Button, onClick = onClick).padding(horizontal = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Icon(icon, contentDescription = null, tint = scheme.onSurface.copy(alpha = if (selected) 1f else .7f), modifier = Modifier.size(21.dp))
+        Icon(icon, contentDescription = null, tint = if (selected) Pop.Ink else scheme.onSurface.copy(alpha = .75f), modifier = Modifier.size(21.dp))
         Spacer(Modifier.width(12.dp))
-        Text(label, Modifier.weight(1f), fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium, fontSize = 15.sp, color = scheme.onSurface, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text(label, Modifier.weight(1f), fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium, fontSize = 15.sp, color = if (selected) Pop.Ink else scheme.onSurface, maxLines = 1, overflow = TextOverflow.Ellipsis)
         if (trailing != null) Icon(Icons.Default.KeyboardArrowDown, contentDescription = null, tint = scheme.onSurface.copy(alpha = .55f), modifier = Modifier.size(20.dp).rotate(rotation))
     }
 }
@@ -238,10 +238,10 @@ private fun TopItem(icon: ImageVector, label: String, selected: Boolean, trailin
 @Composable
 private fun SubItem(label: String, selected: Boolean, onClick: () -> Unit) {
     val scheme = MaterialTheme.colorScheme
-    val bg by animateColorAsState(if (selected) scheme.surfaceVariant else Color.Transparent, tween(160), label = "siBg")
+    val bg by animateColorAsState(if (selected) Pop.Lime else Color.Transparent, tween(160), label = "siBg")
     Text(
         label, fontSize = 14.sp, fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
-        color = scheme.onSurface.copy(alpha = if (selected) 1f else .7f), maxLines = 1, overflow = TextOverflow.Ellipsis,
+        color = if (selected) Pop.Ink else scheme.onSurface.copy(alpha = .75f), maxLines = 1, overflow = TextOverflow.Ellipsis,
         modifier = Modifier.fillMaxWidth().height(38.dp).clip(RoundedCornerShape(10.dp)).background(bg).clickable(role = Role.Tab, onClick = onClick).padding(horizontal = 12.dp).wrapContentHeight(Alignment.CenterVertically)
     )
 }
