@@ -73,7 +73,10 @@ fun petLookOf(m: JsonObject): PetLook {
 
 /** Home-screen companion card. Reads the same customisation as the studio, so edits show up here instantly. */
 @Composable
-fun PetHomeCard(workspace: JsonObject, mood: PetMood, moodText: String, streak: Int, onClick: () -> Unit) {
+fun PetHomeCard(workspace: JsonObject, mood: PetMood, condition: String, streak: Int, onClick: () -> Unit) {
+    val lines = remember(condition) { mascotLines(condition).shuffled() }
+    var lineIdx by remember(condition) { mutableStateOf(0) }
+    val moodText = lines[lineIdx % lines.size]
     val pet = workspace.objectOrEmpty("mascot")
     val look = petLookOf(pet)
     val prog = petProgress(workspace)
@@ -82,7 +85,7 @@ fun PetHomeCard(workspace: JsonObject, mood: PetMood, moodText: String, streak: 
     val bg = PetOptions.backgrounds[look.background.coerceIn(0, PetOptions.backgrounds.lastIndex)]
     val fg = if (bg.red * 0.3f + bg.green * 0.59f + bg.blue * 0.11f > 0.5f) Color(0xFF16231B) else Color(0xFFF4F4F2)
     NeoCard(fill = bg) {
-        Row(Modifier.clickable { tap(); onClick() }, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+        Row(Modifier.clickable { tap(); lineIdx++ }, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
             PetCharacter(look, mood, prog.level, diameter = 128.dp, showBackground = false)
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -92,6 +95,7 @@ fun PetHomeCard(workspace: JsonObject, mood: PetMood, moodText: String, streak: 
                 Text("${PetStageNames[stage]} stage", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = fg.copy(alpha = .75f))
                 Text(moodText, color = fg.copy(alpha = .9f), style = MaterialTheme.typography.bodySmall, maxLines = 3)
                 ProgressBar(prog.xpInLevel / 100f, fg)
+                Text("Customize ›", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Black, color = fg, modifier = Modifier.clip(RoundedCornerShape(50)).border(1.5.dp, fg, RoundedCornerShape(50)).clickable { tap(); onClick() }.padding(horizontal = 10.dp, vertical = 4.dp))
                 val next = nextStageLevel(prog.level)
                 Text(
                     "${prog.xpInLevel} / 100 XP · " + (if (streak > 0) "$streak-day streak" else "log something to start a streak") + (if (next != null) " · grows at Lv $next" else ""),
@@ -194,4 +198,16 @@ fun PetCustomizer(workspace: JsonObject, onChange: (JsonObject.() -> Unit) -> Un
         Spacer(Modifier.height(4.dp))
         Text("Some accessories unlock as your pet levels up. Changes appear on Home straight away.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .65f))
     }
+}
+
+
+/** Fixed mascot lines, chosen only by the user's financial condition. They cannot be edited. */
+fun mascotLines(condition: String): List<String> = when (condition) {
+    "ramen" -> listOf("Takeout has passed the food budget. Instant noodles it is.", "Ramen mode on. Cook at home for a few days and we recover.", "That delivery bill hurt. I'm fine, I'm fine.", "Tiny kitchen win today? I'd cheer for it.")
+    "goal" -> listOf("A goal is fully funded. Past-you would be proud.", "Milestone unlocked. Pick the next target.", "You actually did it. Quietly impressive.", "Party time, then a new goal.")
+    "stress" -> listOf("Spending is ahead of income this month. Let's slow down.", "Red month. One small cut helps more than you think.", "Check the biggest category first. That's where the money is hiding.", "No panic. Just stop adding to it for a few days.")
+    "saving" -> listOf("Savings are growing steadily. Keep it boring.", "Consistent contributions beat big one-off efforts.", "Future-you is getting richer. Rude not to continue.", "Good rate this month. Don't spend the win.")
+    "streak" -> listOf("Logging every day. Habits like this build wealth.", "That streak is the real flex.", "Don't break the chain today.", "Daily tracking means no surprises at month-end.")
+    "empty" -> listOf("Nothing logged yet. Add your first entry and I'll start growing.", "Blank slate. Log one expense to wake me up.", "Hi. Feed me transactions.", "Start small: one entry today.")
+    else -> listOf("Taking it one transaction at a time.", "Steady. Nothing alarming this month.", "Log as you go and I stay happy.", "Check your budgets once a week. It takes a minute.")
 }

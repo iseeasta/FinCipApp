@@ -38,7 +38,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
-data class ProfileData(val name: String, val handle: String, val tagline: String, val seed: Long)
+data class ProfileData(val name: String, val handle: String, val tagline: String, val seed: Long, val avatarMode: String = "seed", val preset: Int = 0, val photoStamp: Long = 0L)
 
 private val Roles = listOf("Student", "Professional", "Freelancer", "Business owner", "Investor", "Saver")
 

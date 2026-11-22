@@ -134,8 +134,10 @@ private fun HubHeader(workspace: JsonObject) {
     val prog = petProgress(workspace)
     NeoCard {
         Box(Modifier.fillMaxWidth()) {
-            Box(Modifier.fillMaxWidth().height(104.dp).clip(RoundedCornerShape(18.dp)).background(Brush.linearGradient(banner)))
-            Box(Modifier.padding(top = 62.dp).align(Alignment.TopCenter).background(MaterialTheme.colorScheme.surface, CircleShape).padding(5.dp)) { ProfileAvatar(p.seed, size = 84.dp) }
+            val bannerImg = if (raw.string("bannerMode") == "photo") com.fincip.nativeapp.ui.rememberUserImage(androidx.compose.ui.platform.LocalContext.current, true, raw.double("bannerStamp").toLong()) else null
+            if (bannerImg != null) androidx.compose.foundation.Image(bannerImg, null, Modifier.fillMaxWidth().height(104.dp).clip(RoundedCornerShape(18.dp)), contentScale = androidx.compose.ui.layout.ContentScale.Crop)
+            else Box(Modifier.fillMaxWidth().height(104.dp).clip(RoundedCornerShape(18.dp)).background(Brush.linearGradient(banner)))
+            Box(Modifier.padding(top = 62.dp).align(Alignment.TopCenter).background(MaterialTheme.colorScheme.surface, CircleShape).padding(5.dp)) { com.fincip.nativeapp.ui.UserAvatar(p, size = 84.dp) }
         }
         Spacer(Modifier.height(48.dp))
         Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -174,21 +176,45 @@ private fun ProfileEditor(profile: JsonObject, onChange: (JsonObject.() -> Unit)
     NeoCard {
         SectionTitle("Your avatar")
         Spacer(Modifier.height(10.dp))
+        val ctx = androidx.compose.ui.platform.LocalContext.current
+        val mode = profile.string("avatarMode", "seed")
+        val photoPicker = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.GetContent()) { uri ->
+            if (uri != null && com.fincip.nativeapp.ui.saveUserImage(ctx, uri, false)) onChange { addProperty("avatarMode", "photo"); addProperty("photoStamp", System.currentTimeMillis()) }
+        }
+        val bannerPicker = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.GetContent()) { uri ->
+            if (uri != null && com.fincip.nativeapp.ui.saveUserImage(ctx, uri, true)) onChange { addProperty("bannerMode", "photo"); addProperty("bannerStamp", System.currentTimeMillis()) }
+        }
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-            ProfileAvatar(seed, size = 84.dp)
+            com.fincip.nativeapp.ui.UserAvatar(profileOf(JsonObject().apply { add("profile", profile) }), size = 84.dp)
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                NeoOutlineButton("Shuffle look", { seed = java.util.Random().nextLong() and 0x7fffffffL; saved = false })
-                Text("Tap to try a new one. Save when you like it.", style = MaterialTheme.typography.labelSmall)
+                NeoOutlineButton("Upload photo", { photoPicker.launch("image/*") })
+                NeoOutlineButton("Shuffle face", { seed = java.util.Random().nextLong() and 0x7fffffffL; saved = false; onChange { addProperty("avatarSeed", seed); addProperty("avatarMode", "seed") } })
             }
         }
         Spacer(Modifier.height(14.dp))
-        Text("Banner colours", fontWeight = FontWeight.Bold)
+        Text("Characters", fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(8.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.horizontalScroll(rememberScrollState())) {
+            com.fincip.nativeapp.ui.AvatarPresets.forEachIndexed { i, look ->
+                val on = mode == "preset" && profile.double("preset").toInt() == i
+                Box(Modifier.size(60.dp).clip(CircleShape).border(if (on) 3.dp else 1.dp, if (on) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline, CircleShape).clickable { tap(); onChange { addProperty("avatarMode", "preset"); addProperty("preset", i) } }) {
+                    com.fincip.nativeapp.ui.PetCharacter(look, com.fincip.nativeapp.ui.PetMood.HAPPY, 6, diameter = 60.dp)
+                }
+            }
+        }
+        Spacer(Modifier.height(14.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("Banner", fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+            NeoOutlineButton("Upload banner", { bannerPicker.launch("image/*") })
+        }
+        Spacer(Modifier.height(8.dp))
+        Text("Banner colours", style = MaterialTheme.typography.labelMedium)
+        Spacer(Modifier.height(6.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.horizontalScroll(rememberScrollState())) {
             Banners.forEachIndexed { i, colors ->
                 Box(Modifier.size(width = 64.dp, height = 36.dp).clip(RoundedCornerShape(10.dp)).background(Brush.linearGradient(colors))
                     .border(if (banner == i) 3.dp else 1.dp, if (banner == i) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline, RoundedCornerShape(10.dp))
-                    .clickable { tap(); banner = i; saved = false })
+                    .clickable { tap(); banner = i; saved = false; onChange { addProperty("banner", i); addProperty("bannerMode", "color") } })
             }
         }
     }

@@ -278,7 +278,8 @@ fun OverviewScreen(workspace: JsonObject, month: String, privacy: Boolean, savin
             val streak = entryStreak(workspace)
             val xp = allTransactions.size * 10 + workspace.arrayOrEmpty("budgets").size() * 25 + workspace.arrayOrEmpty("goals").size() * 25 + workspace.arrayOrEmpty("financeProducts").size() * 25 + (if (achievedGoal) 200 else 0)
             val level = xp / 100 + 1
-            PetHomeCard(workspace, petMood, mood, streak, onMascot)
+            val condition = when { ramen -> "ramen"; achievedGoal -> "goal"; expenses > income && income > 0 -> "stress"; savingMood -> "saving"; streak >= 7 -> "streak"; allTransactions.isEmpty() -> "empty"; else -> "neutral" }
+            PetHomeCard(workspace, petMood, condition, streak, onMascot)
         }
     }
 }
@@ -392,6 +393,7 @@ fun SubscriptionsScreen(workspace: JsonObject, privacy: Boolean, onAdd: () -> Un
 @Composable
 fun CalendarScreen(workspace: JsonObject, month: String, onMonthChange: (String) -> Unit) {
     val monthDate = runCatching { YearMonth.parse(month) }.getOrElse { YearMonth.now() }
+    var picker by remember { mutableStateOf(false) }
     var selected by remember(month) { mutableStateOf(LocalDate.now().takeIf { YearMonth.from(it) == monthDate } ?: monthDate.atDay(1)) }
     val tx = monthlyTransactions(workspace, month)
     val bills = workspace.arrayOrEmpty("recurringRules").objects()
@@ -400,11 +402,13 @@ fun CalendarScreen(workspace: JsonObject, month: String, onMonthChange: (String)
     val days = monthDate.lengthOfMonth()
     val allCells = List(firstOffset) { 0 } + (1..days).toList()
     val weeks = allCells.chunked(7)
+    if (picker) MonthYearPicker(monthDate, { onMonthChange(it.toString()); picker = false }, { picker = false })
     PageColumn {
         PageHeading("MONEY ON THE MOVE", "Your month, in color.", "Green marks income, red marks spending, gold marks bills and blue marks savings milestones.")
         NeoCard {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(monthDate.format(DateTimeFormatter.ofPattern("MMMM yyyy", Locale.ENGLISH)), Modifier.weight(1f), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Black)
+                Text(monthDate.format(DateTimeFormatter.ofPattern("MMMM yyyy", Locale.ENGLISH)) + " ▾", Modifier.weight(1f).clip(RoundedCornerShape(8.dp)).clickable { picker = true }.padding(vertical = 4.dp), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Black)
+                Text("Today", Modifier.clip(RoundedCornerShape(50)).clickable { onMonthChange(YearMonth.now().toString()) }.padding(horizontal = 8.dp, vertical = 4.dp), style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Black)
                 Text("‹", fontSize = 28.sp, modifier = Modifier.clickable { onMonthChange(monthDate.minusMonths(1).toString()) }.padding(horizontal = 12.dp))
                 Text("›", fontSize = 28.sp, modifier = Modifier.clickable { onMonthChange(monthDate.plusMonths(1).toString()) }.padding(horizontal = 12.dp))
             }
@@ -451,6 +455,40 @@ fun CalendarScreen(workspace: JsonObject, month: String, onMonthChange: (String)
             selectedGoals.forEach { g -> Text("GOAL · ${g.string("name", "Savings milestone")}", color = Blue, fontWeight = FontWeight.Bold) }
         }
     }
+}
+
+@Composable
+private fun MonthYearPicker(current: YearMonth, onPick: (YearMonth) -> Unit, onDismiss: () -> Unit) {
+    var year by remember { mutableStateOf(current.year) }
+    var yearGrid by remember { mutableStateOf(false) }
+    val decadeStart = remember(year) { year - Math.floorMod(year, 12) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = { Text("Close", Modifier.clickable { onDismiss() }.padding(12.dp), fontWeight = FontWeight.Black) },
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("‹", fontSize = 28.sp, modifier = Modifier.clickable { if (yearGrid) year -= 12 else year-- }.padding(horizontal = 12.dp))
+                Text(if (yearGrid) "$decadeStart – ${decadeStart + 11}" else "$year ▾", Modifier.weight(1f).clickable { yearGrid = !yearGrid }, fontWeight = FontWeight.Black, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                Text("›", fontSize = 28.sp, modifier = Modifier.clickable { if (yearGrid) year += 12 else year++ }.padding(horizontal = 12.dp))
+            }
+        },
+        text = {
+            val items: List<Pair<String, () -> Unit>> = if (yearGrid) (decadeStart until decadeStart + 12).map { y -> y.toString() to { year = y; yearGrid = false } }
+            else (1..12).map { m -> java.time.Month.of(m).getDisplayName(java.time.format.TextStyle.SHORT, Locale.ENGLISH) to { onPick(YearMonth.of(year, m)) } }
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                items.chunked(3).forEach { row ->
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        row.forEach { (label, act) ->
+                            val on = if (yearGrid) label == current.year.toString() else (label == java.time.Month.of(current.monthValue).getDisplayName(java.time.format.TextStyle.SHORT, Locale.ENGLISH) && year == current.year)
+                            Box(Modifier.weight(1f).clip(RoundedCornerShape(12.dp)).background(if (on) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant).clickable { act() }.padding(vertical = 14.dp), contentAlignment = Alignment.Center) {
+                                Text(label, fontWeight = FontWeight.Bold, color = if (on) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    )
 }
 
 @Composable
@@ -1227,7 +1265,7 @@ fun HouseholdScreen(
 
 fun profileOf(workspace: JsonObject): ProfileData {
     val p = workspace.objectOrEmpty("profile")
-    return ProfileData(p.string("name"), p.string("handle"), p.string("tagline"), p.double("avatarSeed").toLong())
+    return ProfileData(p.string("name"), p.string("handle"), p.string("tagline"), p.double("avatarSeed").toLong(), p.string("avatarMode", "seed"), p.double("preset").toInt(), p.double("photoStamp").toLong())
 }
 
 @Composable
@@ -1241,7 +1279,7 @@ fun ProfileScreen(workspace: JsonObject, onEdit: () -> Unit, onBackup: () -> Uni
             Box(Modifier.fillMaxWidth()) {
                 Box(Modifier.fillMaxWidth().height(110.dp).clip(RoundedCornerShape(20.dp)).background(Brush.linearGradient(listOf(Pop.Lavender, Pop.Coral, Pop.Sun))))
                 Box(Modifier.padding(top = 70.dp).align(Alignment.TopCenter).background(MaterialTheme.colorScheme.surface, CircleShape).padding(5.dp)) {
-                    ProfileAvatar(profile.seed, size = 84.dp)
+                    com.fincip.nativeapp.ui.UserAvatar(profile, size = 84.dp)
                 }
             }
             Spacer(Modifier.height(48.dp))

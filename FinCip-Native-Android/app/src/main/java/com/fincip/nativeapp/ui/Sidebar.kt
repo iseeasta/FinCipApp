@@ -167,7 +167,7 @@ fun FinCipSidebar(
                 Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).clickable(onClickLabel = "Open profile", onClick = onProfile).padding(vertical = 6.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                ProfileAvatar(profile.seed, size = 46.dp)
+                UserAvatar(profile, size = 46.dp)
                 Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {
                     Text((profile.tagline.ifBlank { "FinCip member" }).uppercase(), style = MaterialTheme.typography.labelSmall, letterSpacing = 1.2.sp, color = scheme.onSurface.copy(alpha = .55f), maxLines = 1)
