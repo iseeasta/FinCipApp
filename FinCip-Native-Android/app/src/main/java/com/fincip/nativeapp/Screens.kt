@@ -23,6 +23,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -70,6 +71,15 @@ import com.fincip.nativeapp.data.toBase
 import com.fincip.nativeapp.data.transactions
 import com.fincip.nativeapp.ui.Field
 import com.fincip.nativeapp.ui.MiniBars
+import com.fincip.nativeapp.ui.PetBlob
+import com.fincip.nativeapp.ui.PetMood
+import com.fincip.nativeapp.ui.LineChart
+import com.fincip.nativeapp.ui.ChartSeries
+import com.fincip.nativeapp.ui.DonutChart
+import com.fincip.nativeapp.ui.RingGauge
+import com.fincip.nativeapp.ui.LegendRow
+import com.fincip.nativeapp.ui.ChartColors
+import com.fincip.nativeapp.ui.compactMoney
 import com.fincip.nativeapp.ui.Pop
 import com.fincip.nativeapp.ui.PopField
 import com.fincip.nativeapp.ui.PopChip
@@ -123,6 +133,114 @@ private fun PageHeading(eyebrow: String, title: String, description: String = ""
             )
             Text(title, style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Black, color = fg)
             if (description.isNotBlank()) Text(description, style = MaterialTheme.typography.bodyMedium, color = fg.copy(alpha = .82f), modifier = Modifier.fillMaxWidth(.88f))
+        }
+    }
+}
+
+
+@Composable
+private fun CardLabel(text: String) {
+    Text(text.uppercase(), style = MaterialTheme.typography.labelSmall, letterSpacing = 1.2.sp, fontWeight = FontWeight.Black, color = LocalContentColor.current.copy(alpha = .62f))
+    Spacer(Modifier.height(8.dp))
+}
+
+private fun spendByCategory(workspace: JsonObject, month: String): List<Pair<String, Double>> =
+    monthlyTransactions(workspace, month).filter { it.string("type") != "income" }
+        .groupBy { it.string("category", "Other").ifBlank { "Other" } }
+        .mapValues { (_, v) -> v.sumOf { toBase(workspace, it.double("amount"), it.string("currency", "INR")) } }
+        .toList().sortedByDescending { it.second }
+
+/** Donut + legend for any list of (name, amount) pairs. */
+@Composable
+private fun BreakdownCard(title: String, groups: List<Pair<String, Double>>, privacy: Boolean, base: String, centerLabel: String, emptyText: String) {
+    NeoCard {
+        CardLabel(title)
+        val total = groups.sumOf { it.second }
+        if (groups.isEmpty() || total <= 0.0) {
+            Text(emptyText, style = MaterialTheme.typography.bodySmall)
+        } else {
+            val top = groups.take(5)
+            val other = groups.drop(5).sumOf { it.second }
+            val slices = top.mapIndexed { i, (_, v) -> ChartColors[i % ChartColors.size] to v } + (if (other > 0) listOf(Color(0xFFB0A8C8) to other) else emptyList())
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                DonutChart(slices, centerTop = if (privacy) "••••" else compactMoney(total, base), centerBottom = centerLabel, diameter = 132.dp)
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    top.forEachIndexed { i, (name, v) -> LegendRow(ChartColors[i % ChartColors.size], name, if (privacy) "••" else "${(v / total * 100).toInt()}%") }
+                    if (other > 0) LegendRow(Color(0xFFB0A8C8), "Other", if (privacy) "••" else "${(other / total * 100).toInt()}%")
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CashFlowCard(workspace: JsonObject, month: String, privacy: Boolean, base: String) {
+    val months = (5 downTo 0).map { parseMonth(month).minusMonths(it.toLong()) }
+    val income = months.map { incomeTotal(workspace, it.toString()) }
+    val spend = months.map { expenseTotal(workspace, it.toString()) }
+    NeoCard {
+        CardLabel("Cash flow · last 6 months")
+        LineChart(
+            labels = months.map { it.format(DateTimeFormatter.ofPattern("MMM", Locale.ENGLISH)) },
+            series = listOf(ChartSeries("Income", Pop.Teal, income), ChartSeries("Spending", Pop.Coral, spend)),
+            currency = base, hideValues = privacy
+        )
+    }
+}
+
+@Composable
+private fun WeeklySpendCard(workspace: JsonObject, month: String, privacy: Boolean) {
+    val ym = parseMonth(month)
+    val weekCount = if (ym.lengthOfMonth() > 28) 5 else 4
+    val spendTx = monthlyTransactions(workspace, month).filter { it.string("type") != "income" }
+    val weeks = (0 until weekCount).map { w ->
+        val lo = w * 7 + 1
+        val hi = if (w == weekCount - 1) 31 else w * 7 + 7
+        if (privacy) 0.0 else spendTx.filter { (it.string("date").takeLast(2).toIntOrNull() ?: 0) in lo..hi }
+            .sumOf { toBase(workspace, it.double("amount"), it.string("currency", "INR")) }
+    }
+    NeoCard {
+        CardLabel("Spending by week · $month")
+        MiniBars(values = weeks, labels = (1..weekCount).map { "W$it" }, highlight = weeks.indexOf(weeks.maxOrNull() ?: 0.0).coerceAtLeast(0), accent = Pop.Coral)
+    }
+}
+
+private fun budgetUsed(workspace: JsonObject, month: String, b: JsonObject): Double {
+    val cur = b.string("currency", "INR")
+    return monthlyTransactions(workspace, month).filter { it.string("type") != "income" }.sumOf { tx ->
+        if (tx.string("currency", "INR") != cur) 0.0 else {
+            val splits = tx.arrayOrEmpty("splits").objects()
+            if (splits.isNotEmpty()) splits.filter { it.string("category") == b.string("category") }.sumOf { it.double("amount") }
+            else if (tx.string("category") == b.string("category")) tx.double("amount") else 0.0
+        }
+    }
+}
+
+
+/** Consecutive days (ending today, or yesterday if nothing logged yet today) with at least one entry. */
+private fun entryStreak(workspace: JsonObject): Int {
+    val days = transactions(workspace).mapNotNull { runCatching { LocalDate.parse(it.string("date")) }.getOrNull() }.toSet()
+    var d = LocalDate.now()
+    if (d !in days) d = d.minusDays(1)
+    var n = 0
+    while (d in days) { n++; d = d.minusDays(1) }
+    return n
+}
+
+/** A badge is unlocked purely from the user's own data; nothing here is fabricated. */
+@Composable
+private fun BadgeRow(badges: List<Pair<String, Boolean>>) {
+    Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        badges.forEach { (label, unlocked) ->
+            Text(
+                (if (unlocked) "✓ " else "○ ") + label,
+                style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, maxLines = 1,
+                color = if (unlocked) Pop.Ink else MaterialTheme.colorScheme.onBackground.copy(alpha = .5f),
+                modifier = Modifier.clip(RoundedCornerShape(50))
+                    .background(if (unlocked) Pop.Sun else Color.Transparent)
+                    .border(1.dp, if (unlocked) Color.Transparent else MaterialTheme.colorScheme.outline, RoundedCornerShape(50))
+                    .padding(horizontal = 14.dp, vertical = 8.dp)
+            )
         }
     }
 }
@@ -204,31 +322,36 @@ fun OverviewScreen(workspace: JsonObject, month: String, privacy: Boolean, savin
             MetricTile(metric.first, metric.second, metric.third, fill = metricFill.getValue(key))
         }
 
-        if (allTransactions.isNotEmpty()) {
-            val selectedMonth = parseMonth(month)
-            val months = (5 downTo 0).map { selectedMonth.minusMonths(it.toLong()) }
-            val spend = months.map { if (privacy) 0.0 else expenseTotal(workspace, it.toString()) }
-            NeoCard {
-                Text("LAST 6 MONTHS · SPENDING", style = MaterialTheme.typography.labelSmall, letterSpacing = 1.2.sp, fontWeight = FontWeight.Black, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .6f))
-                Spacer(Modifier.height(4.dp))
-                Text(if (privacy) "••••" else money(expenses, base), style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Black)
-                Spacer(Modifier.height(14.dp))
-                MiniBars(values = spend, labels = months.map { it.format(DateTimeFormatter.ofPattern("MMM", Locale.ENGLISH)) }, highlight = months.lastIndex, accent = Pop.Coral)
-            }
-        }
-
-        NeoCard(fill = Pop.Sun) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                Box(Modifier.size(68.dp).background(mascotAccent, CircleShape), contentAlignment = Alignment.Center) {
-                    Text(mascotEmoji, fontSize = 36.sp)
-                }
-                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text("${pet.string("name", "Mochi")} · your money mascot", fontWeight = FontWeight.Black, color = Pop.Ink)
-                    Text(mood, color = Pop.Ink.copy(alpha = .8f), style = MaterialTheme.typography.bodySmall)
-                    Text("Tap to customize your pal →", color = Pop.Ink, fontWeight = FontWeight.Black, style = MaterialTheme.typography.labelSmall, modifier = Modifier.clickable(onClick = onMascot).padding(vertical = 4.dp))
+        CashFlowCard(workspace, month, privacy, base)
+        BreakdownCard("Where it goes · $month", spendByCategory(workspace, month), privacy, base, "spent", "No spending recorded for $month yet. Add an expense to see the breakdown.")
+        run {
+            val petMood = when { ramen -> PetMood.RAMEN; achievedGoal -> PetMood.CELEBRATE; savingMood -> PetMood.THRIVING; expenses > income && income > 0 -> PetMood.STRESSED; else -> PetMood.HAPPY }
+            val streak = entryStreak(workspace)
+            val xp = allTransactions.size * 10 + workspace.arrayOrEmpty("budgets").size() * 25 + workspace.arrayOrEmpty("goals").size() * 25 + workspace.arrayOrEmpty("financeProducts").size() * 25 + (if (achievedGoal) 200 else 0)
+            val level = xp / 100 + 1
+            NeoCard(fill = Pop.Lavender) {
+                Row(Modifier.clickable(onClick = onMascot), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                    PetBlob(accent = mascotAccent, mood = petMood, diameter = 112.dp)
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text(pet.string("name", "Mochi"), fontWeight = FontWeight.Black, fontSize = 20.sp, color = Pop.Ink, maxLines = 1)
+                            Text("LVL $level", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Black, color = Pop.Cream, modifier = Modifier.clip(RoundedCornerShape(50)).background(Pop.Ink).padding(horizontal = 9.dp, vertical = 4.dp))
+                        }
+                        Text(mood, color = Pop.Ink.copy(alpha = .85f), style = MaterialTheme.typography.bodySmall, maxLines = 3)
+                        ProgressBar((xp % 100) / 100f, Pop.Ink)
+                        Text("${xp % 100} / 100 XP · ${if (streak > 0) "$streak-day streak" else "log something to start a streak"}", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = Pop.Ink)
+                    }
                 }
             }
         }
+        BadgeRow(listOf(
+            "First entry" to allTransactions.isNotEmpty(),
+            "3-day streak" to (entryStreak(workspace) >= 3),
+            "Saver 20%+" to (income > 0 && savingsRate >= 20),
+            "Budgeter" to workspace.arrayOrEmpty("budgets").size().let { it > 0 },
+            "Goal getter" to achievedGoal,
+            "Investor" to workspace.arrayOrEmpty("financeProducts").size().let { it > 0 }
+        ))
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("Recent movement", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Black, modifier = Modifier.weight(1f))
             InlineAction("Add +", onAdd)
@@ -248,6 +371,11 @@ fun TransactionsScreen(workspace: JsonObject, month: String, privacy: Boolean, q
     }
     PageColumn {
         PageHeading("EVERY RUPEE, ACCOUNTED FOR", "Keep the details clear.", "Search, import and manage transactions. Bank statements can be CSV or OFX.")
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Box(Modifier.weight(1f)) { MetricTile("Income", if (privacy) "••••" else compactMoney(incomeTotal(workspace, month), base), month, fill = Pop.Mint) }
+            Box(Modifier.weight(1f)) { MetricTile("Spent", if (privacy) "••••" else compactMoney(expenseTotal(workspace, month), base), "${filtered.size} entries", fill = Pop.Coral) }
+        }
+        WeeklySpendCard(workspace, month, privacy)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { NeoButton("+ Add transaction", Modifier.weight(1f), onAdd); NeoOutlineButton("Import statement", onImport, Modifier.weight(1f)) }
         PopField(value = query, onValueChange = onQuery, modifier = Modifier.fillMaxWidth(), label = { Text("Search transaction, person or project") })
         Row(verticalAlignment = Alignment.CenterVertically) { Text("${filtered.size} transactions · $month", Modifier.weight(1f), style = MaterialTheme.typography.labelMedium); InlineAction("Export CSV ↓", onExport) }
@@ -289,6 +417,21 @@ private fun TransactionCard(item: JsonObject, privacy: Boolean, onClick: () -> U
 fun RecurringScreen(workspace: JsonObject, privacy: Boolean, onAdd: () -> Unit, onDelete: (JsonObject) -> Unit, onMarkPaid: (JsonObject) -> Unit) {
     PageColumn {
         PageHeading("UPCOMING COMMITMENTS", "Bills, without surprises.", "EMIs, subscriptions, rent and recurring income. Reminders are local notifications; no payments are made automatically.")
+        run {
+            val all = workspace.arrayOrEmpty("recurringRules").objects()
+            val cur = workspace.objectOrEmpty("settings").string("baseCurrency", "INR")
+            val out = all.filter { it.string("type") != "income" }.sumOf { toBase(workspace, it.double("amount"), it.string("currency", "INR")) }
+            val inn = all.filter { it.string("type") == "income" }.sumOf { toBase(workspace, it.double("amount"), it.string("currency", "INR")) }
+            val nextRule = all.filter { it.string("nextDate").isNotBlank() }.minByOrNull { it.string("nextDate") }
+            NeoCard(fill = Pop.Peach) {
+                CardLabel("Per-cycle commitments")
+                Text(if (privacy) "••••" else money(out, cur), fontSize = 38.sp, lineHeight = 40.sp, fontWeight = FontWeight.Black, letterSpacing = (-1).sp, maxLines = 1)
+                Spacer(Modifier.height(6.dp))
+                Text(if (nextRule != null) "Next up: ${nextRule.string("title", "Payment")} · ${nextDueLabel(nextRule.string("nextDate"))}" else "Nothing scheduled yet", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.height(10.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { SmallPill("${all.size} rules"); SmallPill("Income in ${if (privacy) "••••" else compactMoney(inn, cur)}") }
+            }
+        }
         NeoButton("+ Add bill or repeat", onClick = onAdd)
         val rules = workspace.arrayOrEmpty("recurringRules").objects().sortedBy { it.string("nextDate") }
         if (rules.isEmpty()) NeoCard { Text("No recurring payments yet", fontWeight = FontWeight.Black); Text("Set a reminder for rent, EMI, subscriptions or salary.", style = MaterialTheme.typography.bodySmall) }
@@ -317,6 +460,7 @@ fun SubscriptionsScreen(workspace: JsonObject, privacy: Boolean, onAdd: () -> Un
     PageColumn {
         PageHeading("REPEAT SPENDING", "Subscriptions, gathered.", "Keep recurring apps, streaming services and memberships visible in one place.")
         NeoButton("+ Add subscription reminder", onClick = onAdd)
+        if (subs.isNotEmpty()) BreakdownCard("Share of subscription spend", subs.map { it.string("title", "Subscription") to toBase(workspace, it.double("amount"), it.string("currency", "INR")) }, privacy, workspace.objectOrEmpty("settings").string("baseCurrency", "INR"), "per cycle", "")
         MetricTile("Monthly subscription total", if (privacy) "••••" else money(subs.filter { it.string("frequency", "monthly") == "monthly" }.sumOf { toBase(workspace, it.double("amount"), it.string("currency", "INR")) }, workspace.objectOrEmpty("settings").string("baseCurrency", "INR")), "Converted from each subscription currency")
         if (subs.isEmpty()) NeoCard { Text("No subscriptions tagged yet", fontWeight = FontWeight.Black); Text("Add a recurring rule with “Subscription” in the name or category.", style = MaterialTheme.typography.bodySmall) }
         subs.forEach { item -> NeoCard { Text(item.string("title"), fontWeight = FontWeight.Black); Text("${item.string("nextDate")} · ${item.string("frequency")}"); Text(if (privacy) "••••" else money(item.double("amount"), item.string("currency", "INR")), fontWeight = FontWeight.Black) } }
@@ -450,6 +594,23 @@ private fun TextButtonTiny(label: String, onClick: () -> Unit) { Text(label, col
 fun BudgetsScreen(workspace: JsonObject, month: String, privacy: Boolean, onAdd: () -> Unit, onDelete: (JsonObject) -> Unit, onExportPack: () -> Unit, onImportPack: () -> Unit) {
     PageColumn {
         PageHeading("SPENDING GUARDRAILS", "Give each rupee a lane.", "Set monthly category limits and watch your progress.")
+        run {
+            val bs = workspace.arrayOrEmpty("budgets").objects()
+            val limits = bs.sumOf { it.double("limit").let { l -> if (l == 0.0) it.double("amount") else l } }
+            val used = bs.sumOf { budgetUsed(workspace, month, it) }
+            val ratio = if (limits > 0) (used / limits) else 0.0
+            val cur = workspace.objectOrEmpty("settings").string("baseCurrency", "INR")
+            NeoCard(fill = Pop.Lavender) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                    RingGauge(ratio.toFloat(), if (ratio > 1) Pop.Coral else Pop.Ink, if (limits > 0) "${(ratio * 100).toInt()}%" else "—", diameter = 108.dp, caption = "used")
+                    Column(Modifier.weight(1f)) {
+                        CardLabel("All budgets · $month")
+                        Text(if (privacy) "••••" else compactMoney(used, cur), fontSize = 30.sp, fontWeight = FontWeight.Black, letterSpacing = (-0.5).sp, maxLines = 1)
+                        Text(if (privacy) "of ••••" else "of ${compactMoney(limits, cur)} planned", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
         NeoButton("+ Create budget", onClick = onAdd)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             NeoOutlineButton("Export shared pack", onExportPack, Modifier.weight(1f))
@@ -483,6 +644,22 @@ fun BudgetsScreen(workspace: JsonObject, month: String, privacy: Boolean, onAdd:
 fun GoalsScreen(workspace: JsonObject, privacy: Boolean, onAdd: () -> Unit, onContribute: (JsonObject) -> Unit, onDelete: (JsonObject) -> Unit, onEditEmergency: () -> Unit) {
     PageColumn {
         PageHeading("FUTURE YOU", "Goals with momentum.", "Savings targets and debt payoff plans, with progress that moves when you do.")
+        run {
+            val gs = workspace.arrayOrEmpty("goals").objects().filter { it.string("type") != "debt" }
+            val target = gs.sumOf { it.double("target") }
+            val saved = gs.sumOf { it.double("saved") }
+            val ratio = if (target > 0) saved / target else 0.0
+            NeoCard(fill = Pop.Mint) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                    RingGauge(ratio.toFloat(), Pop.Teal, if (target > 0) "${(ratio * 100).toInt().coerceIn(0, 999)}%" else "—", diameter = 108.dp, caption = "saved")
+                    Column(Modifier.weight(1f)) {
+                        CardLabel("Savings goals")
+                        Text("${gs.size} active", fontSize = 28.sp, fontWeight = FontWeight.Black)
+                        Text(if (privacy) "•••• saved so far" else "${compactMoney(saved, "INR")} saved so far", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
         NeoButton("+ Add savings or debt goal", onClick = onAdd)
         val goals = workspace.arrayOrEmpty("goals").objects()
         if (goals.isEmpty()) NeoCard { Text("Start with one meaningful goal", fontWeight = FontWeight.Black); Text("Emergency fund, a trip, a course or a debt payoff.", style = MaterialTheme.typography.bodySmall) }
@@ -560,6 +737,16 @@ fun NetWorthScreen(workspace: JsonObject, privacy: Boolean, onAdd: () -> Unit, o
     val base = workspace.objectOrEmpty("settings").string("baseCurrency", "INR")
     PageColumn {
         PageHeading("THE WHOLE PICTURE", "Know what you own.", "Track cash, investments, gold, property, loans and other liabilities.")
+        if (assets + liabilities > 0) NeoCard {
+            CardLabel("Assets vs liabilities")
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                DonutChart(listOf(Pop.Teal to assets, Pop.Coral to liabilities), centerTop = if (privacy) "••••" else compactMoney(assets - liabilities, base), centerBottom = "net worth", diameter = 132.dp)
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    LegendRow(Pop.Teal, "Assets", if (privacy) "••" else compactMoney(assets, base))
+                    LegendRow(Pop.Coral, "Liabilities", if (privacy) "••" else compactMoney(liabilities, base))
+                }
+            }
+        }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { Box(Modifier.weight(1f)) { MetricTile("Assets", if (privacy) "••••" else money(assets, base)) }; Box(Modifier.weight(1f)) { MetricTile("Liabilities", if (privacy) "••••" else money(liabilities, base)) } }
         MetricTile("Net worth", if (privacy) "••••" else money(assets - liabilities, base), "Assets minus liabilities")
         NeoButton("+ Add asset or liability", onClick = onAdd)
@@ -580,6 +767,14 @@ fun SimulatorScreen(workspace: JsonObject) {
     val affordability = (monthlyIncome.toDoubleOrNull() ?: 0.0) - (expenses.toDoubleOrNull() ?: 0.0) - monthly
     PageColumn {
         PageHeading("PLAY WITH THE POSSIBILITIES", "What if you changed one thing?", "Explore savings, spending and purchase scenarios. These are estimates, not guarantees.")
+        NeoCard(fill = Pop.Sun) {
+            CardLabel("Projected savings growth")
+            LineChart(
+                labels = (1..6).map { i -> String.format(Locale.ENGLISH, "%.1fy", months * i / 6.0 / 12.0) },
+                series = listOf(ChartSeries("Saved", Pop.Ink, (1..6).map { i -> monthly * months * i / 6.0 })),
+                currency = base
+            )
+        }
         NeoCard {
             Field("Monthly income", monthlyIncome, { monthlyIncome = it })
             Field("Monthly expenses", expenses, { expenses = it })
@@ -678,6 +873,7 @@ fun IndiaFinanceScreen(workspace: JsonObject, privacy: Boolean, onAdd: () -> Uni
             Box(Modifier.weight(1f)) { MetricTile("Tracked", products.size.toString(), if (products.size == 1) "product" else "products", fill = Pop.Peach) }
         }
         NeoButton("+  Add investment", modifier = Modifier.fillMaxWidth(), onClick = onAdd)
+        if (products.isNotEmpty() && currentTotal > 0) BreakdownCard("Allocation by product", products.groupBy { it.string("kind", it.string("type", "Product")) }.map { (k, v) -> k to v.sumOf { p -> toBase(workspace, p.double("currentValue", p.double("value")), p.string("currency", "INR")) } }.sortedByDescending { it.second }, privacy, base, "value", "")
 
         Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             PopChip("All", selectedKind == "All", { selectedKind = "All" })
@@ -885,6 +1081,7 @@ fun PortfolioScreen(workspace: JsonObject, privacy: Boolean, onAdd: () -> Unit, 
     val value = holdings.sumOf { toBase(workspace, it.double("units", 1.0) * it.double("currentPrice"), it.string("currency", base)) }
     PageColumn {
         PageHeading("YOUR ASSET MIX", "Track the long game.", "Stocks, mutual funds, ETFs and crypto. Prices are entered manually.")
+        if (holdings.isNotEmpty() && value > 0) BreakdownCard("Allocation by asset type", holdings.groupBy { it.string("type", "Asset") }.map { (k, v) -> k to v.sumOf { h -> toBase(workspace, h.double("units", 1.0) * h.double("currentPrice"), h.string("currency", base)) } }.sortedByDescending { it.second }, privacy, base, "total", "")
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { Box(Modifier.weight(1f)) { MetricTile("Invested", if (privacy) "••••" else money(invested, base)) }; Box(Modifier.weight(1f)) { MetricTile("Current value", if (privacy) "••••" else money(value, base)) } }
         MetricTile("Unrealized change", if (privacy) "••••" else money(value - invested, base), "Based on your last entered prices")
         NeoButton("+ Add holding", onClick = onAdd)
@@ -905,6 +1102,13 @@ fun ForecastScreen(workspace: JsonObject, privacy: Boolean) {
     val next = balance + recurringIncome - recurringExpenses
     PageColumn {
         PageHeading("LOOKING AHEAD", "Your next-month outlook.", "A simple projection from your recorded balance and recurring rules. One-time spending is not predicted.")
+        NeoCard(fill = Pop.Lavender) {
+            CardLabel("Balance bridge")
+            MiniBars(
+                values = if (privacy) listOf(0.0, 0.0, 0.0, 0.0) else listOf(kotlin.math.abs(balance), recurringIncome, recurringExpenses, kotlin.math.abs(next)),
+                labels = listOf("Now", "+ In", "− Out", "Next"), highlight = 3, accent = Pop.Ink, chartHeight = 110.dp
+            )
+        }
         MetricTile("Current recorded net", if (privacy) "••••" else money(balance, base))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { Box(Modifier.weight(1f)) { MetricTile("Recurring income", if (privacy) "••••" else money(recurringIncome, base)) }; Box(Modifier.weight(1f)) { MetricTile("Recurring costs", if (privacy) "••••" else money(recurringExpenses, base)) } }
         NeoCard { Text("Projected balance", style = MaterialTheme.typography.labelMedium); Text(if (privacy) "••••" else money(next, base), style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Black); Text("Assumes each saved rule occurs once next month.", style = MaterialTheme.typography.bodySmall) }
@@ -918,6 +1122,8 @@ fun InsightsScreen(workspace: JsonObject, month: String, privacy: Boolean) {
     val base = workspace.objectOrEmpty("settings").string("baseCurrency", "INR")
     PageColumn {
         PageHeading("PATTERNS, NOT JUDGMENT", "Understand your spending.", "See category patterns for the selected month and spot the largest areas.")
+        BreakdownCard("Category split · $month", groups, privacy, base, "spent", "No spending data for $month yet.")
+        WeeklySpendCard(workspace, month, privacy)
         MetricTile("Total spending", if (privacy) "••••" else money(expenseTotal(workspace, month), base), month)
         if (groups.isEmpty()) NeoCard { Text("No spending data yet", fontWeight = FontWeight.Black); Text("Transactions will create spending insights.", style = MaterialTheme.typography.bodySmall) }
         groups.forEachIndexed { index, pair ->
@@ -934,6 +1140,14 @@ fun InsightsScreen(workspace: JsonObject, month: String, privacy: Boolean) {
 fun RulesScreen(workspace: JsonObject, onAdd: () -> Unit, onApply: () -> Unit, onDelete: (JsonObject) -> Unit) {
     PageColumn {
         PageHeading("AUTOMATE THE BORING BITS", "Smart categorization rules.", "Rules match words in transaction titles and update their categories on your request.")
+        run {
+            val rs = workspace.arrayOrEmpty("smartRules").objects()
+            val hits = transactions(workspace).count { t -> rs.any { r -> r.string("keyword").isNotBlank() && t.string("title").contains(r.string("keyword"), true) } }
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Box(Modifier.weight(1f)) { MetricTile("Rules", rs.size.toString(), "active", fill = Pop.Lavender) }
+                Box(Modifier.weight(1f)) { MetricTile("Matches", hits.toString(), "transactions", fill = Pop.Peach) }
+            }
+        }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { NeoButton("+ Add rule", Modifier.weight(1f), onAdd); NeoOutlineButton("Apply rules", onApply, Modifier.weight(1f)) }
         workspace.arrayOrEmpty("smartRules").objects().forEach { rule -> NeoCard { Row(verticalAlignment = Alignment.CenterVertically) { Column(Modifier.weight(1f)) { Text("Contains: ${rule.string("keyword")}", fontWeight = FontWeight.Black); Text("Set category → ${rule.string("category")}", style = MaterialTheme.typography.bodySmall) }; Text("×", modifier = Modifier.clickable { onDelete(rule) }.padding(8.dp)) } } }
     }
@@ -943,6 +1157,7 @@ fun RulesScreen(workspace: JsonObject, onAdd: () -> Unit, onApply: () -> Unit, o
 fun ReceiptScreen(workspace: JsonObject, onAdd: () -> Unit, onOpen: (JsonObject) -> Unit, onDelete: (JsonObject) -> Unit) {
     PageColumn {
         PageHeading("KEEP THE PAPER TRAIL", "Receipts, safely stored.", "Choose a photo, image or PDF. Files are copied into this app's private storage.")
+        MetricTile("Receipts stored", workspace.arrayOrEmpty("receipts").size().toString(), "Private to this device", fill = Pop.Mint)
         NeoButton("+ Add receipt / invoice", onClick = onAdd)
         val receipts = workspace.arrayOrEmpty("receipts").objects()
         if (receipts.isEmpty()) NeoCard { Text("Your receipt vault is empty", fontWeight = FontWeight.Black); Text("Add a receipt to keep proof of purchase close to your records.", style = MaterialTheme.typography.bodySmall) }
@@ -955,6 +1170,14 @@ fun SecurityScreen(workspace: JsonObject, onPrivacy: (Boolean) -> Unit, onImport
     val privacy = workspace.objectOrEmpty("settings").bool("privacyMode")
     PageColumn {
         PageHeading("YOUR DATA, YOUR KEYS", "Private by design.", "Your local workspace is encrypted with an Android Keystore key. Exported backups are password encrypted.")
+        NeoCard(fill = Pop.Teal) {
+            CardLabel("Encryption")
+            Text("AES-256-GCM", fontSize = 34.sp, lineHeight = 36.sp, fontWeight = FontWeight.Black, letterSpacing = (-0.5).sp)
+            Spacer(Modifier.height(6.dp))
+            Text("Local workspace sealed with an Android Keystore key.", style = MaterialTheme.typography.bodySmall)
+            Spacer(Modifier.height(10.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { SmallPill("On-device"); SmallPill(if (privacy) "Privacy ON" else "Privacy OFF") }
+        }
         NeoCard {
             Row(verticalAlignment = Alignment.CenterVertically) { Column(Modifier.weight(1f)) { Text("Privacy mode", fontWeight = FontWeight.Black); Text("Mask financial amounts on screen.", style = MaterialTheme.typography.bodySmall) }; FilterChip(selected = privacy, onClick = { onPrivacy(!privacy) }, label = { Text(if (privacy) "ON" else "OFF") }) }
         }

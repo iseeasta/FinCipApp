@@ -258,10 +258,12 @@ fun PopField(
     label: (@Composable () -> Unit)? = null,
     placeholder: (@Composable () -> Unit)? = null,
     singleLine: Boolean = false,
-    enabled: Boolean = true
+    enabled: Boolean = true,
+    keyboardType: androidx.compose.ui.text.input.KeyboardType = androidx.compose.ui.text.input.KeyboardType.Text
 ) {
     OutlinedTextField(
         value = value, onValueChange = onValueChange, modifier = modifier, enabled = enabled,
+        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = keyboardType),
         label = label, placeholder = placeholder, singleLine = singleLine,
         shape = RoundedCornerShape(Pop.RadiusSmall),
         colors = OutlinedTextFieldDefaults.colors(

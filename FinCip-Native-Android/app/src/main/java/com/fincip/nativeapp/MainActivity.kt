@@ -27,6 +27,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.animation.Crossfade
@@ -669,8 +670,9 @@ private fun FinCipApp(store: FinanceStore, securePrefs: SecurePrefs) {
                 containerColor = MaterialTheme.colorScheme.background,
                 contentWindowInsets = WindowInsets(0, 0, 0, 0),
                 topBar = {
+                  Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.background).statusBarsPadding()) {
                     Row(
-                        Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.background).statusBarsPadding().padding(horizontal = 16.dp, vertical = 10.dp),
+                        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         Box(Modifier.size(44.dp).background(Pop.Sun, CircleShape), contentAlignment = Alignment.Center) { Text("FC", color = Pop.Ink, fontWeight = FontWeight.Black, fontSize = 16.sp) }
@@ -683,18 +685,17 @@ private fun FinCipApp(store: FinanceStore, securePrefs: SecurePrefs) {
                         IconButton(modifier = Modifier.size(42.dp).background(chipBg, CircleShape), onClick = { updateWorkspace { root -> val settings = root.objectOrEmpty("settings"); settings.addProperty("privacyMode", !settings.bool("privacyMode")); root.add("settings", settings) } }) { Icon(if (privacy) Icons.Default.VisibilityOff else Icons.Default.Visibility, contentDescription = "Toggle privacy", modifier = Modifier.size(20.dp)) }
                         IconButton(modifier = Modifier.size(42.dp).background(chipBg, CircleShape), onClick = { dark = !dark; context.getSharedPreferences("fincip_ui", 0).edit().putBoolean("dark", dark).apply() }) { Icon(if (dark) Icons.Default.LightMode else Icons.Default.DarkMode, contentDescription = "Toggle theme", modifier = Modifier.size(20.dp)) }
                     }
-                },
-                bottomBar = {
                     PillNav(selected = group) { g -> group = g; page = NAV_PAGES.first { it.group == g }.id }
-                }
-            ) { innerPadding ->
-                Column(Modifier.fillMaxSize().padding(innerPadding)) {
-                    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                         MonthMenu(month) { month = it }
                         NAV_PAGES.filter { it.group == group }.forEach { item ->
                             PopChip(text = item.title, selected = page == item.id, onClick = { page = item.id })
                         }
                     }
+                  }
+                }
+            ) { innerPadding ->
+                Column(Modifier.fillMaxSize().padding(innerPadding).navigationBarsPadding()) {
                     Crossfade(targetState = page, animationSpec = tween(180), label = "page") { currentPage ->
                     when (currentPage) {
                         "overview" -> OverviewScreen(workspace, month, privacy, savingsRate, balance, onAdd = { openForm("transaction") }, onMascot = { group = "Explore"; page = "settings" })
@@ -969,55 +970,153 @@ private fun FinanceEntryDialog(
     onSave: () -> Unit, onDismiss: () -> Unit
 ) {
     val title = when (type) { "transaction" -> "Add transaction"; "budget" -> "Set budget"; "goal" -> "Create goal"; "contribution" -> "Add contribution"; "bill" -> "Add recurring bill"; "investment" -> "Add portfolio holding"; "asset" -> "Add net-worth item"; "product" -> "Add finance product"; "productContribution" -> "Record investment contribution"; "emergency" -> "Emergency fund settings"; "rule" -> "Add smart rule"; else -> "FinCip entry" }
-    AlertDialog(onDismissRequest = onDismiss, title = { Text(title, fontWeight = FontWeight.Black) }, text = {
-        Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            if (type != "contribution" && type != "productContribution" && type != "emergency") PopField(value = name, onValueChange = onName, label = { Text(if (type == "rule") "Keyword" else "Name / description") }, modifier = Modifier.fillMaxWidth())
-            if (type == "transaction") {
-                Selector("Type", transactionType, listOf("expense", "income"), onTransactionType)
-                Selector("Category", category, listOf("Food", "Transport", "Shopping", "Bills", "Health", "Education", "Entertainment", "Travel", "Home", "Subscriptions", "Personal care", "EMI", "Salary", "Freelance", "Business", "Investment", "Gift", "Refund", "Other"), onCategory)
+    val hasAmount = type in listOf("contribution", "productContribution", "emergency", "transaction", "budget", "goal", "bill", "investment", "asset", "product")
+    val amountLabel = when (type) { "contribution", "productContribution" -> "Contribution amount"; "emergency" -> "Emergency fund balance"; "product" -> "Invested to date"; else -> "Amount / value" }
+    val headerFill = when (type) {
+        "transaction" -> if (transactionType == "income") Pop.Mint else Pop.Peach
+        "budget" -> Pop.Lavender
+        "goal", "contribution", "emergency" -> Pop.Mint
+        "bill" -> Pop.Peach
+        "investment", "product", "productContribution" -> Pop.Lavender
+        else -> Pop.Sun
+    }
+    val categoryOptions: List<String>? = when (type) {
+        "transaction" -> listOf("Food", "Transport", "Shopping", "Bills", "Health", "Education", "Entertainment", "Travel", "Home", "Subscriptions", "Personal care", "EMI", "Salary", "Freelance", "Business", "Investment", "Gift", "Refund", "Other")
+        "investment" -> listOf("Stock", "Mutual fund", "ETF", "Crypto", "Other")
+        "asset" -> listOf("Asset", "Liability")
+        "product" -> listOf("SIP", "Mutual fund", "EPF", "PPF", "NPS", "FD", "RD", "Gold", "Other")
+        else -> null
+    }
+    val categoryLabel = when (type) { "investment" -> "Asset type"; "asset" -> "Item type"; "product" -> "Product type"; else -> "Category" }
+    val fieldGap = Arrangement.spacedBy(12.dp)
+    androidx.compose.ui.window.Dialog(
+        onDismissRequest = onDismiss,
+        properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)
+    ) {
+        Surface(
+            Modifier.fillMaxSize().statusBarsPadding().padding(top = 20.dp),
+            shape = RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp), color = MaterialTheme.colorScheme.background
+        ) {
+            Column(Modifier.fillMaxSize()) {
+                // ---- Coloured header with the amount as the hero
+                Column(Modifier.fillMaxWidth().background(headerFill).padding(start = 20.dp, end = 20.dp, top = 18.dp, bottom = 20.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text("FINCIP / NEW ENTRY", style = MaterialTheme.typography.labelSmall, letterSpacing = 1.4.sp, fontWeight = FontWeight.Black, color = Pop.Ink.copy(alpha = .65f))
+                            Text(title, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Black, color = Pop.Ink)
+                        }
+                        Box(Modifier.size(40.dp).clip(CircleShape).background(Color.White.copy(alpha = .6f)).clickable(onClick = onDismiss), contentAlignment = Alignment.Center) { Text("×", fontSize = 22.sp, fontWeight = FontWeight.Black, color = Pop.Ink) }
+                    }
+                    if (hasAmount) {
+                        Spacer(Modifier.height(16.dp))
+                        Text("${amountLabel.uppercase()} · $currency", style = MaterialTheme.typography.labelSmall, letterSpacing = 1.sp, fontWeight = FontWeight.Black, color = Pop.Ink.copy(alpha = .65f))
+                        androidx.compose.foundation.text.BasicTextField(
+                            value = amount, onValueChange = onAmount, singleLine = true,
+                            textStyle = androidx.compose.ui.text.TextStyle(fontSize = 46.sp, fontWeight = FontWeight.Black, color = Pop.Ink, fontFamily = com.fincip.nativeapp.ui.PopFont),
+                            keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Decimal),
+                            cursorBrush = androidx.compose.ui.graphics.SolidColor(Pop.Ink),
+                            modifier = Modifier.fillMaxWidth(),
+                            decorationBox = { inner -> Box { if (amount.isEmpty()) Text("0", fontSize = 46.sp, fontWeight = FontWeight.Black, color = Pop.Ink.copy(alpha = .3f)); inner() } }
+                        )
+                    }
+                }
+                // ---- Scrollable form body
+                Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 18.dp, vertical = 16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                    if (type == "transaction") PopSegmented(listOf("expense" to "↗  Expense", "income" to "↙  Income"), transactionType, onTransactionType)
+                    if (type == "goal") PopSegmented(listOf("savings" to "Savings goal", "debt" to "Debt payoff"), transactionType, onTransactionType)
+                    if (type == "bill") PopSegmented(listOf("weekly" to "Weekly", "monthly" to "Monthly", "yearly" to "Yearly"), frequency, onFrequency)
+                    if (categoryOptions != null) PopChipPicker(categoryLabel, categoryOptions, category, onCategory)
+                    if (hasAmount) PopChipPicker("Currency", CURRENCY_INFO.map { it.code }, currency, onCurrency)
+
+                    NeoCard {
+                        Text("DETAILS", style = MaterialTheme.typography.labelSmall, letterSpacing = 1.2.sp, fontWeight = FontWeight.Black, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .55f))
+                        Spacer(Modifier.height(10.dp))
+                        Column(verticalArrangement = fieldGap) {
+                            if (type != "contribution" && type != "productContribution" && type != "emergency") PopField(value = name, onValueChange = onName, singleLine = true, label = { Text(if (type == "rule") "Keyword" else "Name / description") }, modifier = Modifier.fillMaxWidth())
+                            if (type == "transaction" || type == "bill" || type == "product") PopField(value = date, onValueChange = onDate, singleLine = true, label = { Text(when (type) { "bill" -> "Next due date"; "product" -> "Start date"; else -> "Date" }) }, placeholder = { Text("YYYY-MM-DD") }, modifier = Modifier.fillMaxWidth())
+                            if (type == "product") {
+                                PopField(value = person, onValueChange = onPerson, singleLine = true, label = { Text("Provider / institution") }, modifier = Modifier.fillMaxWidth())
+                                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                    PopField(value = saved, onValueChange = onSaved, singleLine = true, keyboardType = androidx.compose.ui.text.input.KeyboardType.Decimal, label = { Text("Current value") }, modifier = Modifier.weight(1f))
+                                    PopField(value = contribution, onValueChange = onContribution, singleLine = true, keyboardType = androidx.compose.ui.text.input.KeyboardType.Decimal, label = { Text("Monthly add") }, modifier = Modifier.weight(1f))
+                                }
+                                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                    PopField(value = rate, onValueChange = onRate, singleLine = true, keyboardType = androidx.compose.ui.text.input.KeyboardType.Decimal, label = { Text("Rate % p.a.") }, modifier = Modifier.weight(1f))
+                                    PopField(value = deadline, onValueChange = onDeadline, singleLine = true, label = { Text("Maturity") }, placeholder = { Text("optional") }, modifier = Modifier.weight(1f))
+                                }
+                            }
+                            if (type == "emergency") PopField(value = target, onValueChange = onTarget, singleLine = true, keyboardType = androidx.compose.ui.text.input.KeyboardType.Decimal, label = { Text("Target months of expenses") }, modifier = Modifier.fillMaxWidth())
+                            if (type == "transaction") {
+                                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                    PopField(value = account, onValueChange = onAccount, singleLine = true, label = { Text("Payment account") }, modifier = Modifier.weight(1f))
+                                    PopField(value = person, onValueChange = onPerson, singleLine = true, label = { Text("Person / payee") }, modifier = Modifier.weight(1f))
+                                }
+                                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                    PopField(value = project, onValueChange = onProject, singleLine = true, label = { Text("Project") }, modifier = Modifier.weight(1f))
+                                    PopField(value = tags, onValueChange = onTags, singleLine = true, label = { Text("Tags") }, placeholder = { Text("a, b") }, modifier = Modifier.weight(1f))
+                                }
+                                PopField(value = extra, onValueChange = onExtra, label = { Text("Split allocations · optional") }, placeholder = { Text("Food:250, Travel:100") }, modifier = Modifier.fillMaxWidth())
+                            }
+                            if (type == "goal") {
+                                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                    PopField(value = target, onValueChange = onTarget, singleLine = true, keyboardType = androidx.compose.ui.text.input.KeyboardType.Decimal, label = { Text("Target") }, modifier = Modifier.weight(1f))
+                                    PopField(value = saved, onValueChange = onSaved, singleLine = true, keyboardType = androidx.compose.ui.text.input.KeyboardType.Decimal, label = { Text("Saved / repaid") }, modifier = Modifier.weight(1f))
+                                }
+                                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                    PopField(value = contribution, onValueChange = onContribution, singleLine = true, keyboardType = androidx.compose.ui.text.input.KeyboardType.Decimal, label = { Text("Monthly add") }, modifier = Modifier.weight(1f))
+                                    PopField(value = rate, onValueChange = onRate, singleLine = true, keyboardType = androidx.compose.ui.text.input.KeyboardType.Decimal, label = { Text("Interest % p.a.") }, modifier = Modifier.weight(1f))
+                                }
+                                PopField(value = deadline, onValueChange = onDeadline, singleLine = true, label = { Text("Target date") }, placeholder = { Text("YYYY-MM-DD") }, modifier = Modifier.fillMaxWidth())
+                            }
+                            if (type == "investment") {
+                                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                    PopField(value = target, onValueChange = onTarget, singleLine = true, keyboardType = androidx.compose.ui.text.input.KeyboardType.Decimal, label = { Text("Units") }, modifier = Modifier.weight(1f))
+                                    PopField(value = saved, onValueChange = onSaved, singleLine = true, keyboardType = androidx.compose.ui.text.input.KeyboardType.Decimal, label = { Text("Current unit price") }, modifier = Modifier.weight(1f))
+                                }
+                            }
+                        }
+                    }
+                    if (type == "transaction") PopSegmented(listOf("false" to "Personal", "true" to "Shared budget pack"), shared.toString()) { onShared(it == "true") }
+                    if (type == "contribution") Text("This amount is added to the selected goal or debt balance.", style = MaterialTheme.typography.bodySmall)
+                    if (type == "productContribution") Text("This adds to invested amount and current value. Update the current value after your next statement.", style = MaterialTheme.typography.bodySmall)
+                    if (type == "emergency") Text("Keep this reserve separate from your ordinary savings goals.", style = MaterialTheme.typography.bodySmall)
+                }
+                // ---- Sticky action bar
+                Row(
+                    Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).navigationBarsPadding().imePadding().padding(horizontal = 18.dp, vertical = 12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically
+                ) {
+                    com.fincip.nativeapp.ui.NeoOutlineButton("Cancel", onDismiss, Modifier.weight(1f))
+                    NeoButton("Save", Modifier.weight(1.6f), onSave)
+                }
             }
-            if (type == "investment") Selector("Asset type", category, listOf("Stock", "Mutual fund", "ETF", "Crypto", "Other"), onCategory)
-            if (type == "asset") Selector("Item type", category, listOf("Asset", "Liability"), onCategory)
-            if (type == "product") Selector("Product type", category, listOf("SIP", "Mutual fund", "EPF", "PPF", "NPS", "FD", "RD", "Gold", "Other"), onCategory)
-            if (type == "goal") Selector("Goal type", transactionType, listOf("savings", "debt"), onTransactionType)
-            if (type == "bill") Selector("Frequency", frequency, listOf("weekly", "monthly", "yearly"), onFrequency)
-            if (type == "contribution" || type == "productContribution" || type == "emergency" || type == "transaction" || type == "budget" || type == "goal" || type == "bill" || type == "investment" || type == "asset" || type == "product") {
-                PopField(value = amount, onValueChange = onAmount, label = { Text(when (type) { "contribution", "productContribution" -> "Contribution amount"; "emergency" -> "Emergency fund balance"; "product" -> "Invested to date"; else -> "Amount / value" }) }, modifier = Modifier.fillMaxWidth())
-                Selector("Currency", currency, CURRENCY_INFO.map { it.code }, onCurrency)
-            }
-            if (type == "transaction" || type == "bill" || type == "product") PopField(value = date, onValueChange = onDate, label = { Text(when (type) { "bill" -> "Next due date · YYYY-MM-DD"; "product" -> "Start date · YYYY-MM-DD"; else -> "Date · YYYY-MM-DD" }) }, modifier = Modifier.fillMaxWidth())
-            if (type == "product") {
-                PopField(value = person, onValueChange = onPerson, label = { Text("Provider / institution") }, modifier = Modifier.fillMaxWidth())
-                PopField(value = saved, onValueChange = onSaved, label = { Text("Current value") }, modifier = Modifier.fillMaxWidth())
-                PopField(value = contribution, onValueChange = onContribution, label = { Text("Monthly contribution") }, modifier = Modifier.fillMaxWidth())
-                PopField(value = rate, onValueChange = onRate, label = { Text("Rate (% p.a.)") }, modifier = Modifier.fillMaxWidth())
-                PopField(value = deadline, onValueChange = onDeadline, label = { Text("Maturity date · optional") }, modifier = Modifier.fillMaxWidth())
-            }
-            if (type == "emergency") PopField(value = target, onValueChange = onTarget, label = { Text("Target months of expenses") }, modifier = Modifier.fillMaxWidth())
-            if (type == "transaction") {
-                PopField(value = account, onValueChange = onAccount, label = { Text("Payment account") }, modifier = Modifier.fillMaxWidth())
-                PopField(value = tags, onValueChange = onTags, label = { Text("Tags · comma separated") }, modifier = Modifier.fillMaxWidth())
-                PopField(value = person, onValueChange = onPerson, label = { Text("Person / payee") }, modifier = Modifier.fillMaxWidth())
-                PopField(value = project, onValueChange = onProject, label = { Text("Project") }, modifier = Modifier.fillMaxWidth())
-                PopField(value = extra, onValueChange = onExtra, label = { Text("Split allocations · optional") }, placeholder = { Text("Food:250, Travel:100") }, modifier = Modifier.fillMaxWidth())
-                Row(verticalAlignment = Alignment.CenterVertically) { Text("Include in shared budget pack", Modifier.weight(1f), style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold); FilterChip(selected = shared, onClick = { onShared(!shared) }, label = { Text(if (shared) "Shared" else "Personal") }) }
-            }
-            if (type == "goal") {
-                PopField(value = target, onValueChange = onTarget, label = { Text("Target amount") }, modifier = Modifier.fillMaxWidth())
-                PopField(value = saved, onValueChange = onSaved, label = { Text("Already saved / repaid") }, modifier = Modifier.fillMaxWidth())
-                PopField(value = contribution, onValueChange = onContribution, label = { Text("Monthly contribution") }, modifier = Modifier.fillMaxWidth())
-                PopField(value = deadline, onValueChange = onDeadline, label = { Text("Target date · YYYY-MM-DD") }, modifier = Modifier.fillMaxWidth())
-                PopField(value = rate, onValueChange = onRate, label = { Text("Debt interest % p.a.") }, modifier = Modifier.fillMaxWidth())
-            }
-            if (type == "investment") {
-                PopField(value = target, onValueChange = onTarget, label = { Text("Units") }, modifier = Modifier.fillMaxWidth())
-                PopField(value = saved, onValueChange = onSaved, label = { Text("Current unit price") }, modifier = Modifier.fillMaxWidth())
-            }
-            if (type == "contribution") Text("This amount is added to the selected goal or debt balance.", style = MaterialTheme.typography.bodySmall)
-            if (type == "productContribution") Text("This adds to invested amount and current value. Update the current value after your next statement.", style = MaterialTheme.typography.bodySmall)
-            if (type == "emergency") Text("Keep this reserve separate from your ordinary savings goals.", style = MaterialTheme.typography.bodySmall)
         }
-    }, confirmButton = { NeoButton("Save", onClick = onSave) }, dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } })
+    }
+}
+
+/** Full-width pill toggle for 2-3 mutually exclusive choices. */
+@Composable
+private fun PopSegmented(options: List<Pair<String, String>>, selected: String, onSelect: (String) -> Unit) {
+    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(50)).background(MaterialTheme.colorScheme.surfaceVariant).padding(4.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+        options.forEach { (key, label) ->
+            val active = key == selected
+            val bg by animateColorAsState(if (active) MaterialTheme.colorScheme.primary else Color.Transparent, tween(160), label = "seg")
+            Box(Modifier.weight(1f).clip(RoundedCornerShape(50)).background(bg).clickable { onSelect(key) }.padding(vertical = 12.dp), contentAlignment = Alignment.Center) {
+                Text(label, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelLarge, color = if (active) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface, maxLines = 1)
+            }
+        }
+    }
+}
+
+/** Labelled horizontally-scrolling chip row used instead of dropdowns in the entry form. */
+@Composable
+private fun PopChipPicker(label: String, options: List<String>, selected: String, onSelect: (String) -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(label.uppercase(), style = MaterialTheme.typography.labelSmall, letterSpacing = 1.2.sp, fontWeight = FontWeight.Black, color = MaterialTheme.colorScheme.onBackground.copy(alpha = .6f))
+        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            options.forEach { option -> PopChip(option, option == selected, { onSelect(option) }) }
+        }
+    }
 }
 
 private fun parseQuickEntry(text: String, currency: String): JsonObject? {
@@ -1163,16 +1262,16 @@ private fun writePdfReport(context: android.content.Context, uri: Uri, workspace
 }
 
 
-/** Floating dark pill navigation. The active tab expands into a sun-yellow capsule with its label. */
+/** Dark pill navigation pinned under the header. The active tab expands into a sun-yellow capsule with its label. */
 @Composable
 private fun PillNav(selected: String, onSelect: (String) -> Unit) {
     val items = listOf("Home" to Icons.Default.Home, "Money" to Icons.Default.Wallet, "Plan" to Icons.Default.Star, "Explore" to Icons.Default.Explore)
     val isDark = MaterialTheme.colorScheme.background.luminance() < 0.3f
     val pillColor = if (isDark) Color(0xFF110E26) else Pop.Ink
     val pill = RoundedCornerShape(50)
-    Box(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 16.dp, vertical = 10.dp)) {
+    Box(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)) {
         Row(
-            Modifier.fillMaxWidth().shadow(12.dp, pill).background(pillColor, pill).padding(6.dp),
+            Modifier.fillMaxWidth().shadow(8.dp, pill).background(pillColor, pill).padding(6.dp),
             horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically
         ) {
             items.forEach { (name, icon) ->
