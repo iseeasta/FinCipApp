@@ -806,47 +806,126 @@ fun SettingsScreen(workspace: JsonObject, vibe: String, onVibe: (String) -> Unit
     val dashboardLabels = mapOf("balance" to "Total balance", "income" to "Monthly income", "expenses" to "Monthly spending", "savings" to "Savings rate")
     val visibleDashboardOrder = (dashboardOrder.filter { it in dashboardLabels.keys }.distinct() + dashboardLabels.keys.filterNot { it in dashboardOrder }).take(4)
     PageColumn {
-        PageHeading("MAKE THE APP FEEL LIKE YOURS", "Set your FinCip vibe.", "Material You dynamic color, playful palettes, and a mascot that grows with your habits.")
-        NeoCard {
-            Text("Vibe themes", fontWeight = FontWeight.Black, style = MaterialTheme.typography.titleLarge)
-            listOf("Material You", "Y2K Acid", "Cozy Lo-Fi", "Receipt Paper").forEach { item -> Row(Modifier.fillMaxWidth().clickable { onVibe(item) }.padding(vertical = 7.dp), verticalAlignment = Alignment.CenterVertically) { Text(if (vibe == item) "●" else "○", Modifier.padding(end = 9.dp), color = MaterialTheme.colorScheme.primary); Column(Modifier.weight(1f)) { Text(item, fontWeight = FontWeight.Bold); Text(when (item) { "Material You" -> "Use Android wallpaper colours on Android 12+"; "Y2K Acid" -> "Acid lime, pink and electric blue"; "Cozy Lo-Fi" -> "Warm paper, clay and olive"; else -> "Thermal receipt paper and monospace details" }, style = MaterialTheme.typography.labelSmall) } } }
-            Divider(Modifier.padding(vertical = 6.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) { Text("Dark appearance", Modifier.weight(1f), fontWeight = FontWeight.Bold); FilterChip(selected = dark, onClick = { onDark(!dark) }, label = { Text(if (dark) "Dark" else "Light") }) }
+        PageHeading("PREFERENCES & CONTROLS", "Make FinCip yours.", "A calmer control centre for your appearance, money preferences, dashboard and personal companion.")
+        NeoCard(fill = Color(0xFFE8F0FF)) {
+            Text("YOUR WORKSPACE", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Black, letterSpacing = 1.2.sp, color = Color(0xFF263B60))
+            Text("Everything in its right place.", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Black, color = Color(0xFF17243A))
+            Text("Your finance records remain stored locally on this device unless you choose to connect cloud sync.", style = MaterialTheme.typography.bodySmall, color = Color(0xFF263B60))
         }
         NeoCard {
-            Text("Dashboard layout", fontWeight = FontWeight.Black, style = MaterialTheme.typography.titleLarge)
-            Text("Choose the order of the four summary cards on Home.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .68f))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("Appearance", fontWeight = FontWeight.Black, style = MaterialTheme.typography.titleLarge)
+                    Text("Choose the visual atmosphere of your app.", style = MaterialTheme.typography.bodySmall)
+                }
+                Text(if (dark) "◐" else "☼", fontSize = 25.sp)
+            }
+            Text("COLOR SYSTEM", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Black, letterSpacing = 1.sp)
+            listOf("Material You", "Y2K Acid", "Cozy Lo-Fi", "Receipt Paper").forEach { item ->
+                Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(if (vibe == item) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = .35f)).clickable { onVibe(item) }.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(if (vibe == item) "●" else "○", color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(end = 10.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(item, fontWeight = FontWeight.Bold)
+                        Text(when (item) { "Material You" -> "Wallpaper-aware Android colours"; "Y2K Acid" -> "Acid lime, pink and electric blue"; "Cozy Lo-Fi" -> "Warm paper, clay and olive"; else -> "Thermal paper and crisp mono details" }, style = MaterialTheme.typography.labelSmall)
+                    }
+                    if (vibe == item) Text("ACTIVE", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Black, style = MaterialTheme.typography.labelSmall)
+                }
+            }
+            Divider(Modifier.padding(vertical = 5.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) { Text("Dark appearance", fontWeight = FontWeight.Bold); Text("Switch between light and dark surfaces", style = MaterialTheme.typography.bodySmall) }
+                FilterChip(selected = dark, onClick = { onDark(!dark) }, label = { Text(if (dark) "On" else "Off") })
+            }
+        }
+        NeoCard {
+            Text("Dashboard arrangement", fontWeight = FontWeight.Black, style = MaterialTheme.typography.titleLarge)
+            Text("Reorder the four summary tiles shown on Home.", style = MaterialTheme.typography.bodySmall)
             visibleDashboardOrder.forEachIndexed { index, key ->
-                Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text("${index + 1}.", fontWeight = FontWeight.Black, modifier = Modifier.width(28.dp))
-                    Text(dashboardLabels[key] ?: key, Modifier.weight(1f), fontWeight = FontWeight.Bold)
-                    Text("↑", modifier = Modifier.clickable(enabled = index > 0) {
-                        val next = visibleDashboardOrder.toMutableList(); val value = next[index - 1]; next[index - 1] = next[index]; next[index] = value; onDashboardOrder(next)
-                    }.padding(horizontal = 10.dp, vertical = 7.dp), color = if (index > 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = .25f), fontWeight = FontWeight.Black)
-                    Text("↓", modifier = Modifier.clickable(enabled = index < visibleDashboardOrder.lastIndex) {
-                        val next = visibleDashboardOrder.toMutableList(); val value = next[index + 1]; next[index + 1] = next[index]; next[index] = value; onDashboardOrder(next)
-                    }.padding(horizontal = 10.dp, vertical = 7.dp), color = if (index < visibleDashboardOrder.lastIndex) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = .25f), fontWeight = FontWeight.Black)
+                Row(Modifier.fillMaxWidth().padding(vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.size(32.dp).background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(9.dp)), contentAlignment = Alignment.Center) { Text("${index + 1}", fontWeight = FontWeight.Black) }
+                    Text(dashboardLabels[key] ?: key, Modifier.weight(1f).padding(start = 10.dp), fontWeight = FontWeight.Bold)
+                    Text("↑", modifier = Modifier.clickable(enabled = index > 0) { val next = visibleDashboardOrder.toMutableList(); val v = next[index - 1]; next[index - 1] = next[index]; next[index] = v; onDashboardOrder(next) }.padding(horizontal = 12.dp, vertical = 8.dp), color = if (index > 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = .25f), fontWeight = FontWeight.Black)
+                    Text("↓", modifier = Modifier.clickable(enabled = index < visibleDashboardOrder.lastIndex) { val next = visibleDashboardOrder.toMutableList(); val v = next[index + 1]; next[index + 1] = next[index]; next[index] = v; onDashboardOrder(next) }.padding(horizontal = 12.dp, vertical = 8.dp), color = if (index < visibleDashboardOrder.lastIndex) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = .25f), fontWeight = FontWeight.Black)
                 }
             }
         }
         NeoCard {
-            Text("Currency & locale", fontWeight = FontWeight.Black, style = MaterialTheme.typography.titleLarge)
-            Selector("Dashboard currency", base, CURRENCY_INFO.map { it.code }, onBaseCurrency)
-            Text("Add missing conversion assumptions in Money → Currency converter.", style = MaterialTheme.typography.bodySmall)
+            Text("Money preferences", fontWeight = FontWeight.Black, style = MaterialTheme.typography.titleLarge)
+            Text("Choose the currency used for your dashboard summaries.", style = MaterialTheme.typography.bodySmall)
+            Selector("Default currency", base, CURRENCY_INFO.map { it.code }, onBaseCurrency)
+            Text("Original transaction currencies are preserved. Conversion assumptions live in Money → Currency.", style = MaterialTheme.typography.labelSmall)
         }
         NeoCard {
-            Row(verticalAlignment = Alignment.CenterVertically) { Text("${petKind}  ${petName}", fontSize = 28.sp); Spacer(Modifier.weight(1f)); SmallPill("MASCOT") }
-            Text("Customize your finance companion", fontWeight = FontWeight.Black)
-            Field("Mascot name", petName, onPetName)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.size(48.dp).background(Color(0xFFFFE8B8), RoundedCornerShape(14.dp)), contentAlignment = Alignment.Center) { Text(petKind, fontSize = 27.sp) }
+                Column(Modifier.weight(1f).padding(start = 11.dp)) {
+                    Text("Your companion", fontWeight = FontWeight.Black, style = MaterialTheme.typography.titleLarge)
+                    Text("A little personality in your finance space", style = MaterialTheme.typography.bodySmall)
+                }
+            }
+            Field("Companion name", petName, onPetName)
             Selector("Character", petKind, listOf("🐱", "🤖", "🌱", "🦊", "🐸", "🐼", "🐙"), onPetKind)
             Selector("Accent color", petAccent, listOf("#D8FF3E", "#FF83D1", "#7DC6FF", "#E8B86B", "#A7D9A5"), onPetAccent)
-            Text("The mascot is cheerful when your savings rate is healthy and switches to ramen mode when takeout exceeds its food budget.", style = MaterialTheme.typography.bodySmall)
         }
         NeoCard {
-            Text("Portable reports", fontWeight = FontWeight.Black, style = MaterialTheme.typography.titleLarge)
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { NeoOutlineButton("Export CSV", onCsv, Modifier.weight(1f)); NeoButton("Save PDF", onClick = onPdf, modifier = Modifier.weight(1f)) }
+            Text("Your data, your copy.", fontWeight = FontWeight.Black, style = MaterialTheme.typography.titleLarge)
+            Text("Create portable reports that you can keep on another device or in your own cloud storage.", style = MaterialTheme.typography.bodySmall)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                NeoOutlineButton("Export CSV", onCsv, Modifier.weight(1f))
+                NeoButton("Save PDF", onClick = onPdf, modifier = Modifier.weight(1f))
+            }
         }
-        Text("Clarity over complexity · FinCip Native", style = MaterialTheme.typography.labelSmall)
+        Text("FinCip · Personal finance studio", style = MaterialTheme.typography.labelSmall)
+    }
+}
+
+@Composable
+fun ProfileScreen(workspace: JsonObject, privacy: Boolean, onSettings: () -> Unit, onSecurity: () -> Unit, onExport: () -> Unit) {
+    val settings = workspace.objectOrEmpty("settings")
+    val currency = settings.string("baseCurrency", "INR")
+    val totalIncome = incomeTotal(workspace)
+    val totalExpenses = expenseTotal(workspace)
+    val balance = totalIncome - totalExpenses
+    val txCount = transactions(workspace).size
+    val goals = workspace.arrayOrEmpty("goals").objects()
+    val completedGoals = goals.count { it.double("target") > 0 && it.double("saved") >= it.double("target") }
+    PageColumn {
+        PageHeading("YOUR FINCIP IDENTITY", "Your profile.", "A clear view of your finance journey and the controls around your account.")
+        NeoCard(fill = Color(0xFF171A19)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(13.dp)) {
+                Box(Modifier.size(66.dp).background(Color(0xFFD8FF3E), RoundedCornerShape(20.dp)).border(2.dp, Color.White.copy(alpha = .45f), RoundedCornerShape(20.dp)), contentAlignment = Alignment.Center) { Text("FC", color = Color(0xFF171A19), fontSize = 25.sp, fontWeight = FontWeight.Black) }
+                Column(Modifier.weight(1f)) {
+                    Text("Your FinCip space", color = Color.White, fontWeight = FontWeight.Black, style = MaterialTheme.typography.titleLarge)
+                    Text("PERSONAL FINANCE MEMBER", color = Color(0xFFD8FF3E), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+                    Text("Local-first · Private by default", color = Color.White.copy(alpha = .72f), style = MaterialTheme.typography.bodySmall)
+                }
+            }
+            Divider(color = Color.White.copy(alpha = .2f), modifier = Modifier.padding(vertical = 13.dp))
+            Text("Your records stay on this device unless you enable a sync connection.", color = Color.White.copy(alpha = .85f), style = MaterialTheme.typography.bodySmall)
+        }
+        Text("YOUR FINANCIAL FOOTPRINT", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Black, letterSpacing = 1.2.sp)
+        Row(horizontalArrangement = Arrangement.spacedBy(9.dp)) {
+            Box(Modifier.weight(1f)) { MetricTile("Net recorded balance", if (privacy) "••••••" else money(balance, currency), "Income minus expenses") }
+            Box(Modifier.weight(1f)) { MetricTile("Transactions", txCount.toString(), "Saved entries") }
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(9.dp)) {
+            Box(Modifier.weight(1f)) { MetricTile("Savings goals", goals.size.toString(), "$completedGoals completed") }
+            Box(Modifier.weight(1f)) { MetricTile("Privacy mode", if (privacy) "ON" else "OFF", "Dashboard visibility") }
+        }
+        NeoCard {
+            Text("Account & preferences", fontWeight = FontWeight.Black, style = MaterialTheme.typography.titleLarge)
+            Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).clickable(onClick = onSettings).padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text("⚙", fontSize = 22.sp); Column(Modifier.weight(1f).padding(start = 12.dp)) { Text("Settings", fontWeight = FontWeight.Bold); Text("Appearance, currency and dashboard", style = MaterialTheme.typography.bodySmall) }; Text("→", fontWeight = FontWeight.Black)
+            }
+            Divider()
+            Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).clickable(onClick = onSecurity).padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text("⌑", fontSize = 22.sp); Column(Modifier.weight(1f).padding(start = 12.dp)) { Text("Privacy & security", fontWeight = FontWeight.Bold); Text("Backup, restore and local privacy", style = MaterialTheme.typography.bodySmall) }; Text("→", fontWeight = FontWeight.Black)
+            }
+            Divider()
+            Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).clickable(onClick = onExport).padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text("⇧", fontSize = 22.sp); Column(Modifier.weight(1f).padding(start = 12.dp)) { Text("Export my records", fontWeight = FontWeight.Bold); Text("Keep a portable copy of your data", style = MaterialTheme.typography.bodySmall) }; Text("→", fontWeight = FontWeight.Black)
+            }
+        }
     }
 }
 
