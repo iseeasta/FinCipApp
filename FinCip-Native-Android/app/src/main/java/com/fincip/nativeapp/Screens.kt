@@ -101,6 +101,44 @@ private fun InlineAction(text: String, onClick: () -> Unit) {
 }
 
 @Composable
+private fun DataStory(title: String, caption: String, values: List<Pair<String, Double>>, currency: String = "INR", privacy: Boolean = false) {
+    val points = values.take(6)
+    if (points.isEmpty()) return
+    var selected by remember(title, points.size) { mutableStateOf(points.indices.maxByOrNull { points[it].second } ?: 0) }
+    val safeIndex = selected.coerceIn(points.indices)
+    val peak = points.maxOfOrNull { it.second }?.coerceAtLeast(0.0001) ?: 1.0
+    val chosen = points[safeIndex]
+    val accent = MaterialTheme.colorScheme.primary
+    NeoCard(fill = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = .38f)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text(title, fontWeight = FontWeight.Black, style = MaterialTheme.typography.titleMedium)
+                Text(caption, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .65f))
+            }
+            Text("↗", color = accent, fontWeight = FontWeight.Black, fontSize = 20.sp)
+        }
+        Text(if (privacy) "••••••" else when (currency) {
+            "COUNT" -> chosen.second.toInt().toString()
+            "PCT" -> "%.1f%%".format(chosen.second)
+            else -> money(chosen.second, currency)
+        }, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Black)
+        Text(chosen.first, style = MaterialTheme.typography.labelSmall, color = accent, fontWeight = FontWeight.Bold)
+        Row(Modifier.fillMaxWidth().height(94.dp), horizontalArrangement = Arrangement.spacedBy(7.dp), verticalAlignment = Alignment.Bottom) {
+            points.forEachIndexed { index, point ->
+                val fraction = (point.second.coerceAtLeast(0.0) / peak).toFloat().coerceIn(.06f, 1f)
+                Column(Modifier.weight(1f).fillMaxHeight().clickable { selected = index }, horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Bottom) {
+                    Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.BottomCenter) {
+                        Box(Modifier.fillMaxWidth(.72f).height((76f * fraction).dp).clip(RoundedCornerShape(topStart = 7.dp, topEnd = 7.dp)).background(if (index == safeIndex) accent else accent.copy(alpha = .28f)))
+                    }
+                    Text(point.first.take(7), style = MaterialTheme.typography.labelSmall, maxLines = 1, color = if (index == safeIndex) accent else MaterialTheme.colorScheme.onSurface.copy(alpha = .65f))
+                }
+            }
+        }
+        Text("Tap a bar to inspect its value.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .55f))
+    }
+}
+
+@Composable
 fun OverviewScreen(workspace: JsonObject, month: String, privacy: Boolean, savingsRate: Double, balance: Double, onAdd: () -> Unit, onMascot: () -> Unit) {
     val base = workspace.objectOrEmpty("settings").string("baseCurrency", "INR")
     val income = incomeTotal(workspace, month)
@@ -120,6 +158,7 @@ fun OverviewScreen(workspace: JsonObject, month: String, privacy: Boolean, savin
     val mood = when { ramen -> "Ramen mode · takeout has crossed the food budget"; achievedGoal -> "Goal unlocked · you reached a savings milestone"; savingMood -> "Thriving · consistent contributions are helping future-you"; expenses > income && income > 0 -> "A little stressed · spending is ahead of income"; else -> "Taking it one transaction at a time" }
     PageColumn {
         PageHeading("YOUR FINANCIAL SPACE", "Make room for what matters.", "A native, local-first money companion. Your data stays on this device unless you enable sync.")
+        DataStory("Monthly money flow", "Compare what came in, went out and remains", listOf("Income" to income, "Spending" to expenses, "Net" to (income - expenses)), base, privacy)
         val metricDefinitions = listOf(
             "balance" to Triple("Total balance", if (privacy) "••••••" else money(balance, base), "Across all recorded activity"),
             "income" to Triple("Income · $month", if (privacy) "••••" else money(income, base), "Money received"),
@@ -169,6 +208,7 @@ fun TransactionsScreen(workspace: JsonObject, month: String, privacy: Boolean, q
     }
     PageColumn {
         PageHeading("EVERY RUPEE, ACCOUNTED FOR", "Keep the details clear.", "Search, import and manage transactions. Bank statements can be CSV or OFX.")
+        DataStory("Transaction activity", "Your filtered entries at a glance", listOf("Income" to filtered.filter { it.string("type") == "income" }.sumOf { it.double("amount") }, "Spending" to filtered.filter { it.string("type") != "income" }.sumOf { it.double("amount") }, "Entries" to filtered.size.toDouble()), base, privacy)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { NeoButton("+ Add transaction", Modifier.weight(1f), onAdd); NeoOutlineButton("Import statement", onImport, Modifier.weight(1f)) }
         OutlinedTextField(value = query, onValueChange = onQuery, modifier = Modifier.fillMaxWidth(), label = { Text("Search transaction, person or project") })
         Row(verticalAlignment = Alignment.CenterVertically) { Text("${filtered.size} transactions · $month", Modifier.weight(1f), style = MaterialTheme.typography.labelMedium); InlineAction("Export CSV ↓", onExport) }
@@ -210,6 +250,7 @@ private fun TransactionCard(item: JsonObject, privacy: Boolean, onClick: () -> U
 fun RecurringScreen(workspace: JsonObject, privacy: Boolean, onAdd: () -> Unit, onDelete: (JsonObject) -> Unit, onMarkPaid: (JsonObject) -> Unit) {
     PageColumn {
         PageHeading("UPCOMING COMMITMENTS", "Bills, without surprises.", "EMIs, subscriptions, rent and recurring income. Reminders are local notifications; no payments are made automatically.")
+        DataStory("Commitment mix", "Compare saved recurring amounts", workspace.arrayOrEmpty("recurringRules").objects().take(5).map { it.string("title", "Bill").take(7) to it.double("amount") }, privacy = privacy)
         NeoButton("+ Add bill or repeat", onClick = onAdd)
         val rules = workspace.arrayOrEmpty("recurringRules").objects().sortedBy { it.string("nextDate") }
         if (rules.isEmpty()) NeoCard { Text("No recurring payments yet", fontWeight = FontWeight.Black); Text("Set a reminder for rent, EMI, subscriptions or salary.", style = MaterialTheme.typography.bodySmall) }
@@ -237,6 +278,7 @@ fun SubscriptionsScreen(workspace: JsonObject, privacy: Boolean, onAdd: () -> Un
     val subs = workspace.arrayOrEmpty("recurringRules").objects().filter { it.string("title").contains("subscription", true) || it.string("category").contains("subscription", true) || it.string("category").contains("stream", true) }
     PageColumn {
         PageHeading("REPEAT SPENDING", "Subscriptions, gathered.", "Keep recurring apps, streaming services and memberships visible in one place.")
+        DataStory("Subscription costs", "Tap a service to inspect its recurring amount", subs.take(6).map { it.string("title", "Service").take(7) to it.double("amount") }, workspace.objectOrEmpty("settings").string("baseCurrency", "INR"), privacy)
         NeoButton("+ Add subscription reminder", onClick = onAdd)
         MetricTile("Monthly subscription total", if (privacy) "••••" else money(subs.filter { it.string("frequency", "monthly") == "monthly" }.sumOf { toBase(workspace, it.double("amount"), it.string("currency", "INR")) }, workspace.objectOrEmpty("settings").string("baseCurrency", "INR")), "Converted from each subscription currency")
         if (subs.isEmpty()) NeoCard { Text("No subscriptions tagged yet", fontWeight = FontWeight.Black); Text("Add a recurring rule with “Subscription” in the name or category.", style = MaterialTheme.typography.bodySmall) }
@@ -257,6 +299,7 @@ fun CalendarScreen(workspace: JsonObject, month: String, onMonthChange: (String)
     val weeks = allCells.chunked(7)
     PageColumn {
         PageHeading("MONEY ON THE MOVE", "Your month, in color.", "Green marks income, red marks spending, gold marks bills and blue marks savings milestones.")
+        DataStory("Monthly activity", "Income and outflow for the selected month", listOf("Income" to tx.filter { it.string("type") == "income" }.sumOf { it.double("amount") }, "Spending" to tx.filter { it.string("type") != "income" }.sumOf { it.double("amount") }, "Bills" to bills.sumOf { it.double("amount") }), workspace.objectOrEmpty("settings").string("baseCurrency", "INR"))
         NeoCard {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(monthDate.format(DateTimeFormatter.ofPattern("MMMM yyyy", Locale.ENGLISH)), Modifier.weight(1f), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Black)
@@ -326,6 +369,7 @@ fun CurrencyScreen(workspace: JsonObject, update: ((JsonObject) -> Unit) -> Unit
     val converted = if (fromRate > 0 && toRate > 0) (amount.toDoubleOrNull() ?: 0.0) * fromRate / toRate else null
     PageColumn {
         PageHeading("GLOBAL MONEY", "Convert across borders.", "Ten currencies supported. Rates are editable reference assumptions, not live quotes.")
+        DataStory("Reference rate board", "Stored units per INR · select a currency", rates.entrySet().filter { it.value.asDouble > 0 }.take(6).map { it.key to it.value.asDouble }, "COUNT")
         NeoCard {
             Text("AMOUNT", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Black)
             OutlinedTextField(value = amount, onValueChange = { amount = it }, modifier = Modifier.fillMaxWidth(), label = { Text("Amount") })
@@ -378,6 +422,7 @@ fun BudgetsScreen(workspace: JsonObject, month: String, privacy: Boolean, onAdd:
         }
         Text("Share category limits and transactions explicitly marked as shared. Import merges these into this device; it does not replace your personal workspace.", style = MaterialTheme.typography.bodySmall)
         val budgets = workspace.arrayOrEmpty("budgets").objects()
+        DataStory("Budget limits", "Compare the size of each category allowance", budgets.take(6).map { it.string("category", "Other").take(7) to it.double("limit", it.double("amount")) }, workspace.objectOrEmpty("settings").string("baseCurrency", "INR"), privacy)
         if (budgets.isEmpty()) NeoCard { Text("No budgets set yet", fontWeight = FontWeight.Black); Text("Add a category limit to see how you're doing.", style = MaterialTheme.typography.bodySmall) }
         budgets.forEach { b ->
             val budgetCurrency = b.string("currency", "INR")
@@ -406,6 +451,7 @@ fun GoalsScreen(workspace: JsonObject, privacy: Boolean, onAdd: () -> Unit, onCo
         PageHeading("FUTURE YOU", "Goals with momentum.", "Savings targets and debt payoff plans, with progress that moves when you do.")
         NeoButton("+ Add savings or debt goal", onClick = onAdd)
         val goals = workspace.arrayOrEmpty("goals").objects()
+        DataStory("Goal progress", "Compare saved amounts across your targets", goals.take(6).map { it.string("name", "Goal").take(7) to it.double("saved") }, privacy = privacy)
         if (goals.isEmpty()) NeoCard { Text("Start with one meaningful goal", fontWeight = FontWeight.Black); Text("Emergency fund, a trip, a course or a debt payoff.", style = MaterialTheme.typography.bodySmall) }
         goals.forEach { goal ->
             val target = goal.double("target"); val saved = goal.double("saved")
@@ -481,6 +527,7 @@ fun NetWorthScreen(workspace: JsonObject, privacy: Boolean, onAdd: () -> Unit, o
     val base = workspace.objectOrEmpty("settings").string("baseCurrency", "INR")
     PageColumn {
         PageHeading("THE WHOLE PICTURE", "Know what you own.", "Track cash, investments, gold, property, loans and other liabilities.")
+        DataStory("Assets versus liabilities", "See the two sides of your balance sheet", listOf("Assets" to assets, "Liabilities" to liabilities, "Net worth" to (assets - liabilities)), base, privacy)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { Box(Modifier.weight(1f)) { MetricTile("Assets", if (privacy) "••••" else money(assets, base)) }; Box(Modifier.weight(1f)) { MetricTile("Liabilities", if (privacy) "••••" else money(liabilities, base)) } }
         MetricTile("Net worth", if (privacy) "••••" else money(assets - liabilities, base), "Assets minus liabilities")
         NeoButton("+ Add asset or liability", onClick = onAdd)
@@ -501,6 +548,7 @@ fun SimulatorScreen(workspace: JsonObject) {
     val affordability = (monthlyIncome.toDoubleOrNull() ?: 0.0) - (expenses.toDoubleOrNull() ?: 0.0) - monthly
     PageColumn {
         PageHeading("PLAY WITH THE POSSIBILITIES", "What if you changed one thing?", "Explore savings, spending and purchase scenarios. These are estimates, not guarantees.")
+        DataStory("Scenario snapshot", "How the monthly plan changes", listOf("Income" to (monthlyIncome.toDoubleOrNull() ?: 0.0), "Expenses" to (expenses.toDoubleOrNull() ?: 0.0), "Savings" to monthly, "Buffer" to affordability), base)
         NeoCard {
             Field("Monthly income", monthlyIncome, { monthlyIncome = it })
             Field("Monthly expenses", expenses, { expenses = it })
@@ -520,6 +568,7 @@ fun IndiaFinanceScreen(workspace: JsonObject, privacy: Boolean, onAdd: () -> Uni
     val currentTotal = products.sumOf { toBase(workspace, it.double("currentValue", it.double("value")), it.string("currency", "INR")) }
     PageColumn {
         PageHeading("LONG-TERM MONEY", "India finance, organized.", "Track SIPs, mutual funds, EPF, PPF, NPS, fixed deposits and recurring deposits. Values are entered by you.")
+        DataStory("Investment growth", "Compare invested amount with current value", listOf("Invested" to investedTotal, "Current" to currentTotal, "Gain" to (currentTotal - investedTotal)), base, privacy)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Box(Modifier.weight(1f)) { MetricTile("Invested", if (privacy) "••••" else money(investedTotal, base)) }
             Box(Modifier.weight(1f)) { MetricTile("Current value", if (privacy) "••••" else money(currentTotal, base)) }
@@ -711,6 +760,7 @@ fun PortfolioScreen(workspace: JsonObject, privacy: Boolean, onAdd: () -> Unit, 
     val value = holdings.sumOf { toBase(workspace, it.double("units", 1.0) * it.double("currentPrice"), it.string("currency", base)) }
     PageColumn {
         PageHeading("YOUR ASSET MIX", "Track the long game.", "Stocks, mutual funds, ETFs and crypto. Prices are entered manually.")
+        DataStory("Portfolio value", "Compare your cost basis and current holdings", listOf("Invested" to invested, "Current" to value, "Change" to (value - invested)), base, privacy)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { Box(Modifier.weight(1f)) { MetricTile("Invested", if (privacy) "••••" else money(invested, base)) }; Box(Modifier.weight(1f)) { MetricTile("Current value", if (privacy) "••••" else money(value, base)) } }
         MetricTile("Unrealized change", if (privacy) "••••" else money(value - invested, base), "Based on your last entered prices")
         NeoButton("+ Add holding", onClick = onAdd)
@@ -731,6 +781,7 @@ fun ForecastScreen(workspace: JsonObject, privacy: Boolean) {
     val next = balance + recurringIncome - recurringExpenses
     PageColumn {
         PageHeading("LOOKING AHEAD", "Your next-month outlook.", "A simple projection from your recorded balance and recurring rules. One-time spending is not predicted.")
+        DataStory("Next month projection", "See the recurring flows behind the estimate", listOf("Current" to balance, "Income" to recurringIncome, "Costs" to recurringExpenses, "Projected" to next), base, privacy)
         MetricTile("Current recorded net", if (privacy) "••••" else money(balance, base))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { Box(Modifier.weight(1f)) { MetricTile("Recurring income", if (privacy) "••••" else money(recurringIncome, base)) }; Box(Modifier.weight(1f)) { MetricTile("Recurring costs", if (privacy) "••••" else money(recurringExpenses, base)) } }
         NeoCard { Text("Projected balance", style = MaterialTheme.typography.labelMedium); Text(if (privacy) "••••" else money(next, base), style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Black); Text("Assumes each saved rule occurs once next month.", style = MaterialTheme.typography.bodySmall) }
@@ -744,6 +795,7 @@ fun InsightsScreen(workspace: JsonObject, month: String, privacy: Boolean) {
     val base = workspace.objectOrEmpty("settings").string("baseCurrency", "INR")
     PageColumn {
         PageHeading("PATTERNS, NOT JUDGMENT", "Understand your spending.", "See category patterns for the selected month and spot the largest areas.")
+        DataStory("Where spending goes", "Tap a category to inspect its total", groups.take(6).map { it.first.take(7) to it.second }, base, privacy)
         MetricTile("Total spending", if (privacy) "••••" else money(expenseTotal(workspace, month), base), month)
         if (groups.isEmpty()) NeoCard { Text("No spending data yet", fontWeight = FontWeight.Black); Text("Transactions will create spending insights.", style = MaterialTheme.typography.bodySmall) }
         groups.forEachIndexed { index, pair ->
@@ -760,6 +812,7 @@ fun InsightsScreen(workspace: JsonObject, month: String, privacy: Boolean) {
 fun RulesScreen(workspace: JsonObject, onAdd: () -> Unit, onApply: () -> Unit, onDelete: (JsonObject) -> Unit) {
     PageColumn {
         PageHeading("AUTOMATE THE BORING BITS", "Smart categorization rules.", "Rules match words in transaction titles and update their categories on your request.")
+        DataStory("Rule coverage", "How many rules are ready to classify entries", listOf("Rules" to workspace.arrayOrEmpty("smartRules").size.toDouble(), "Transactions" to transactions(workspace).size.toDouble()), "COUNT")
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { NeoButton("+ Add rule", Modifier.weight(1f), onAdd); NeoOutlineButton("Apply rules", onApply, Modifier.weight(1f)) }
         workspace.arrayOrEmpty("smartRules").objects().forEach { rule -> NeoCard { Row(verticalAlignment = Alignment.CenterVertically) { Column(Modifier.weight(1f)) { Text("Contains: ${rule.string("keyword")}", fontWeight = FontWeight.Black); Text("Set category → ${rule.string("category")}", style = MaterialTheme.typography.bodySmall) }; Text("×", modifier = Modifier.clickable { onDelete(rule) }.padding(8.dp)) } } }
     }
@@ -769,6 +822,7 @@ fun RulesScreen(workspace: JsonObject, onAdd: () -> Unit, onApply: () -> Unit, o
 fun ReceiptScreen(workspace: JsonObject, onAdd: () -> Unit, onOpen: (JsonObject) -> Unit, onDelete: (JsonObject) -> Unit) {
     PageColumn {
         PageHeading("KEEP THE PAPER TRAIL", "Receipts, safely stored.", "Choose a photo, image or PDF. Files are copied into this app's private storage.")
+        DataStory("Receipt vault", "Your locally saved proof of purchase", listOf("Saved" to workspace.arrayOrEmpty("receipts").size.toDouble(), "Transactions" to transactions(workspace).size.toDouble()), "COUNT")
         NeoButton("+ Add receipt / invoice", onClick = onAdd)
         val receipts = workspace.arrayOrEmpty("receipts").objects()
         if (receipts.isEmpty()) NeoCard { Text("Your receipt vault is empty", fontWeight = FontWeight.Black); Text("Add a receipt to keep proof of purchase close to your records.", style = MaterialTheme.typography.bodySmall) }
@@ -781,6 +835,7 @@ fun SecurityScreen(workspace: JsonObject, onPrivacy: (Boolean) -> Unit, onImport
     val privacy = workspace.objectOrEmpty("settings").bool("privacyMode")
     PageColumn {
         PageHeading("YOUR DATA, YOUR KEYS", "Private by design.", "Your local workspace is encrypted with an Android Keystore key. Exported backups are password encrypted.")
+        DataStory("Local data footprint", "Records currently stored in this workspace", listOf("Transactions" to transactions(workspace).size.toDouble(), "Budgets" to workspace.arrayOrEmpty("budgets").size.toDouble(), "Goals" to workspace.arrayOrEmpty("goals").size.toDouble(), "Receipts" to workspace.arrayOrEmpty("receipts").size.toDouble()), "COUNT")
         NeoCard {
             Row(verticalAlignment = Alignment.CenterVertically) { Column(Modifier.weight(1f)) { Text("Privacy mode", fontWeight = FontWeight.Black); Text("Mask financial amounts on screen.", style = MaterialTheme.typography.bodySmall) }; FilterChip(selected = privacy, onClick = { onPrivacy(!privacy) }, label = { Text(if (privacy) "ON" else "OFF") }) }
         }
@@ -938,6 +993,7 @@ fun HouseholdScreen(
 ) {
     PageColumn {
         PageHeading("OPTIONAL PRIVATE CLOUD", "Your household, together.", "Connect your own Supabase project for account sync and shared budget limits.")
+        DataStory("Household setup", "A quick view of local connection readiness", listOf("Signed in" to if (session.string("accessToken").isNotBlank()) 1.0 else 0.0, "Shared budgets" to sharedBudgets.length.toDouble()), "COUNT")
         NeoCard {
             Text("Supabase configuration", fontWeight = FontWeight.Black)
             Field("Project URL", url, onUrl, hint = "https://your-project.supabase.co")
