@@ -843,6 +843,7 @@ private fun FinCipApp(store: FinanceStore, securePrefs: SecurePrefs) {
                     }
                 }
             }
+            }
         }
     }
 
