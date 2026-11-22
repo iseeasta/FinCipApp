@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
@@ -40,6 +41,8 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Explore
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material.icons.filled.Visibility
@@ -55,8 +58,11 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.ModalNavigationDrawer
+import androidx.compose.material3.ModalDrawerSheet
+import androidx.compose.material3.NavigationDrawerItem
+import androidx.compose.material3.DrawerValue
+import androidx.compose.material3.rememberDrawerState
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -156,6 +162,7 @@ class MainActivity : ComponentActivity() {
 private fun FinCipApp(store: FinanceStore, securePrefs: SecurePrefs) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     var workspace by remember { mutableStateOf(defaultWorkspace()) }
     var loading by remember { mutableStateOf(true) }
     var vibe by remember { mutableStateOf(context.getSharedPreferences("fincip_ui", 0).getString("vibe", "Material You") ?: "Material You") }
@@ -635,12 +642,52 @@ private fun FinCipApp(store: FinanceStore, securePrefs: SecurePrefs) {
             val monthExpenses = expenseTotal(workspace, month)
             val balance = incomeTotal(workspace) - expenseTotal(workspace)
             val savingsRate = if (monthIncome > 0) (monthIncome - monthExpenses) / monthIncome * 100 else 0.0
+            ModalNavigationDrawer(
+                drawerState = drawerState,
+                drawerContent = {
+                    ModalDrawerSheet {
+                        Column(Modifier.fillMaxHeight().padding(horizontal = 10.dp, vertical = 14.dp)) {
+                            Row(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Box(Modifier.size(38.dp).background(Color(0xFFFFD166), RoundedCornerShape(11.dp)).border(2.dp, Color.Black, RoundedCornerShape(11.dp)), contentAlignment = Alignment.Center) { Text("FC", color = Color.Black, fontWeight = FontWeight.Black) }
+                                Column(Modifier.padding(start = 10.dp)) {
+                                    Text("FinCip", fontWeight = FontWeight.Black, style = MaterialTheme.typography.titleLarge)
+                                    Text("MONEY, WITH CLARITY", style = MaterialTheme.typography.labelSmall, letterSpacing = 1.sp)
+                                }
+                            }
+                            Divider(Modifier.padding(vertical = 8.dp))
+                            Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
+                                NAV_PAGES.groupBy { it.group }.forEach { (section, pages) ->
+                                    Text(section.uppercase(Locale.ROOT), modifier = Modifier.padding(start = 13.dp, top = 13.dp, bottom = 5.dp), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Black, letterSpacing = 1.1.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .58f))
+                                    pages.forEach { item ->
+                                        NavigationDrawerItem(
+                                            label = { Text(item.title, maxLines = 1) },
+                                            selected = page == item.id,
+                                            onClick = { group = item.group; page = item.id; scope.launch { drawerState.close() } },
+                                            icon = { Text(item.glyph, fontSize = 18.sp) },
+                                            modifier = Modifier.padding(vertical = 2.dp)
+                                        )
+                                    }
+                                }
+                            }
+                            Divider(Modifier.padding(vertical = 9.dp))
+                            Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(if (page == "profile") MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = .45f)).clickable { page = "profile"; scope.launch { drawerState.close() } }.padding(start = 11.dp, end = 3.dp, top = 9.dp, bottom = 9.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Box(Modifier.size(40.dp).background(Color(0xFFD8FF3E), RoundedCornerShape(13.dp)), contentAlignment = Alignment.Center) { Text("FC", color = Color(0xFF171A19), fontWeight = FontWeight.Black) }
+                                Column(Modifier.weight(1f).padding(start = 10.dp)) {
+                                    Text("Your profile", fontWeight = FontWeight.Black)
+                                    Text("Personal finance space", style = MaterialTheme.typography.labelSmall)
+                                }
+                                IconButton(onClick = { page = "settings"; scope.launch { drawerState.close() } }) { Icon(Icons.Default.Settings, contentDescription = "Settings") }
+                            }
+                        }
+                    }
+                }
+            ) {
             Scaffold(
                 contentWindowInsets = WindowInsets.navigationBars,
                 topBar = {
                     Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.background).padding(horizontal = 16.dp, vertical = 10.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                            Box(Modifier.size(42.dp).background(Color(0xFFFFD166), RoundedCornerShape(10.dp)).border(2.dp, Color.Black, RoundedCornerShape(10.dp)), contentAlignment = Alignment.Center) { Text("FC", color = Color.Black, fontWeight = FontWeight.Black, fontSize = 17.sp) }
+                            IconButton(onClick = { scope.launch { drawerState.open() } }, modifier = Modifier.size(42.dp).background(Color(0xFFFFD166), RoundedCornerShape(10.dp)).border(2.dp, Color.Black, RoundedCornerShape(10.dp))) { Icon(Icons.Default.Menu, contentDescription = "Open navigation", tint = Color.Black) }
                             Column(Modifier.weight(1f)) {
                                 Text("FinCip", fontWeight = FontWeight.Black, fontSize = 20.sp)
                                 Text("PERSONAL FINANCE STUDIO", style = MaterialTheme.typography.labelSmall, letterSpacing = 1.sp)
@@ -654,23 +701,12 @@ private fun FinCipApp(store: FinanceStore, securePrefs: SecurePrefs) {
                         Divider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = .12f))
                     }
                 },
-                bottomBar = {
-                    NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
-                        listOf("Home", "Money", "Plan", "Explore").forEach { g ->
-                            val selected = group == g
-                            val icon = when (g) { "Home" -> Icons.Default.Home; "Money" -> Icons.Default.Wallet; "Plan" -> Icons.Default.Star; else -> Icons.Default.Explore }
-                            NavigationBarItem(selected = selected, onClick = { group = g; page = NAV_PAGES.first { it.group == g }.id }, icon = { Icon(icon, contentDescription = g) }, label = { Text(g) })
-                        }
-                    }
-                }
+
             ) { innerPadding ->
+            }
                 Column(Modifier.fillMaxSize().padding(innerPadding)) {
-                    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(7.dp)) {
-                        NAV_PAGES.filter { it.group == group }.forEach { item ->
-                            FilterChip(selected = page == item.id, onClick = { page = item.id }, label = { Text("${item.glyph}  ${item.title}", maxLines = 1) })
-                        }
-                    }
                     when (page) {
+                        "profile" -> ProfileScreen(workspace, privacy, onSettings = { page = "settings" }, onSecurity = { page = "security" }, onExport = { page = "security" })
                         "overview" -> OverviewScreen(workspace, month, privacy, savingsRate, balance, onAdd = { openForm("transaction") }, onMascot = { group = "Explore"; page = "settings" })
                         "transactions" -> TransactionsScreen(workspace, month, privacy, transactionQuery, { transactionQuery = it }, { openForm("transaction") }, { openForm("transaction", it) }, { deleteFromArray("transactions", it.string("id")) }, { statementLauncher.launch(arrayOf("text/*", "application/octet-stream")) }, { exportCsvLauncher.launch("FinCip-transactions.csv") })
                         "recurring" -> RecurringScreen(workspace, privacy, { openForm("bill") }, { deleteFromArray("recurringRules", it.string("id")) }, { markRecurringPaid(it) })
