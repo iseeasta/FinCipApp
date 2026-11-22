@@ -255,7 +255,7 @@ private fun InlineAction(text: String, onClick: () -> Unit) {
 }
 
 @Composable
-fun OverviewScreen(workspace: JsonObject, month: String, privacy: Boolean, savingsRate: Double, balance: Double, onAdd: () -> Unit, onMascot: () -> Unit, onOpen: (String) -> Unit = {}, onNewGoal: () -> Unit = {}, onEditTx: (JsonObject) -> Unit = {}) {
+fun OverviewScreen(workspace: JsonObject, month: String, privacy: Boolean, savingsRate: Double, balance: Double, onAdd: () -> Unit, onMascot: () -> Unit, onOpen: (String) -> Unit = {}, onNewGoal: () -> Unit = {}, onEditTx: (JsonObject) -> Unit = {}, onWidgets: (List<String>) -> Unit = {}) {
     val base = workspace.objectOrEmpty("settings").string("baseCurrency", "INR")
     val income = incomeTotal(workspace, month)
     val expenses = expenseTotal(workspace, month)
@@ -272,7 +272,7 @@ fun OverviewScreen(workspace: JsonObject, month: String, privacy: Boolean, savin
     val mascotAccent = runCatching { Color(android.graphics.Color.parseColor(pet.string("accent", "#D8FF3E"))) }.getOrElse { Color(0xFFFFD166) }
     val mascotEmoji = when { ramen -> "🍜"; achievedGoal -> "🥳"; savingMood -> when (pet.string("kind", "🐱")) { "🌱" -> "🌳"; "🤖" -> "🤖✨"; "🦊" -> "🦊💛"; else -> "😸" }; expenses > income && income > 0 -> "😵"; else -> pet.string("kind", "🐱") }
     val mood = when { ramen -> "Ramen mode · takeout has crossed the food budget"; achievedGoal -> "Goal unlocked · you reached a savings milestone"; savingMood -> "Thriving · consistent contributions are helping future-you"; expenses > income && income > 0 -> "A little stressed · spending is ahead of income"; else -> "Taking it one transaction at a time" }
-    AnalyticsOverview(workspace, month, privacy, base, onAdd, onOpen, onNewGoal, onEditTx) {
+    AnalyticsOverview(workspace, month, privacy, base, onAdd, onOpen, onNewGoal, onEditTx, petSlot = {
         run {
             val petMood = when { ramen -> PetMood.RAMEN; achievedGoal -> PetMood.CELEBRATE; savingMood -> PetMood.THRIVING; expenses > income && income > 0 -> PetMood.STRESSED; else -> PetMood.HAPPY }
             val streak = entryStreak(workspace)
@@ -281,7 +281,7 @@ fun OverviewScreen(workspace: JsonObject, month: String, privacy: Boolean, savin
             val condition = when { ramen -> "ramen"; achievedGoal -> "goal"; expenses > income && income > 0 -> "stress"; savingMood -> "saving"; streak >= 7 -> "streak"; allTransactions.isEmpty() -> "empty"; else -> "neutral" }
             PetHomeCard(workspace, petMood, condition, streak, onMascot)
         }
-    }
+    }, widgets = homeWidgetsOf(workspace), onWidgets = onWidgets)
 }
 
 @Composable
