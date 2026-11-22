@@ -13,6 +13,7 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
@@ -84,12 +85,18 @@ private fun popDark() = darkColorScheme(
 )
 
 @Composable
-fun FinCipTheme(vibe: String, dark: Boolean, content: @Composable () -> Unit) {
+fun FinCipTheme(vibe: String, dark: Boolean, accent: String = "Green", content: @Composable () -> Unit) {
     val context = LocalContext.current
     val systemDark = isSystemInDarkTheme()
-    val useDark = dark || ((vibe == "System" || vibe == "Material You") && systemDark)
+    val wallpaper = accent == "Wallpaper" && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+    val useDark = dark || accent == "Black" || ((vibe == "System" || vibe == "Material You" || wallpaper) && systemDark && accent != "White")
 
-    val scheme = when (vibe) {
+    val leafFamily = vibe == "Pastel Pop" || vibe == "Brutalist Lime" || vibe == "Leaf"
+    val scheme = when {
+        leafFamily && wallpaper -> if (useDark) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
+        leafFamily -> accentScheme(accent, useDark)
+        else -> null
+    } ?: when (vibe) {
         "Pastel Pop", "Brutalist Lime", "Leaf" -> if (useDark) popDark() else popLight()
         "Material You", "System" -> if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             if (useDark) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
@@ -146,6 +153,52 @@ fun FinCipTheme(vibe: String, dark: Boolean, content: @Composable () -> Unit) {
     )
     MaterialTheme(colorScheme = scheme, typography = typo, shapes = shapes, content = content)
 }
+
+/** App colour presets: each re-tints primary, containers and the page background of the Leaf look. */
+data class AccentPreset(val name: String, val swatch: Color)
+val AccentPresets = listOf(
+    AccentPreset("Green", Color(0xFF1F5C3A)), AccentPreset("Red", Color(0xFFB3261E)), AccentPreset("Yellow", Color(0xFFF0B429)),
+    AccentPreset("Pink", Color(0xFFD81B77)), AccentPreset("White", Color(0xFFF4F4F2)), AccentPreset("Black", Color(0xFF111111)),
+    AccentPreset("Wallpaper", Color(0xFF7C9CF5))
+)
+
+private fun accentScheme(accent: String, dark: Boolean): androidx.compose.material3.ColorScheme? {
+    if (accent == "Green" || accent == "Wallpaper") return if (dark) popDark() else popLight()
+    if (accent == "Black") return darkColorScheme(
+        primary = Color.White, onPrimary = Color.Black, secondary = Pop.Coral, onSecondary = Color.White, tertiary = Pop.Teal, onTertiary = Color.White,
+        background = Color.Black, onBackground = Color(0xFFF4F4F2), surface = Color(0xFF121212), onSurface = Color(0xFFF4F4F2),
+        surfaceVariant = Color(0xFF1E1E1E), onSurfaceVariant = Color(0xFFCCCCCC), secondaryContainer = Color(0xFF2A2A2A), onSecondaryContainer = Color.White,
+        primaryContainer = Color(0xFF2A2A2A), onPrimaryContainer = Color.White, outline = Color(0xFF555555), outlineVariant = Color(0xFF2A2A2A)
+    )
+    if (accent == "White") return lightColorScheme(
+        primary = Color(0xFF222222), onPrimary = Color.White, secondary = Pop.Coral, onSecondary = Color.White, tertiary = Pop.Teal, onTertiary = Color.White,
+        background = Color.White, onBackground = Color(0xFF161616), surface = Color(0xFFFAFAFA), onSurface = Color(0xFF161616),
+        surfaceVariant = Color(0xFFF0F0F0), onSurfaceVariant = Color(0xFF444444), secondaryContainer = Color(0xFFEDEDED), onSecondaryContainer = Color(0xFF161616),
+        primaryContainer = Color(0xFFEDEDED), onPrimaryContainer = Color(0xFF161616), outline = Color(0xFFCCCCCC), outlineVariant = Color(0xFFE8E8E8)
+    )
+    // Colour families: (primary, container tint, page background) for light; (primary, container) for dark.
+    val (p, c, bg, pd) = when (accent) {
+        "Red" -> listOf(0xFFB3261E, 0xFFFADBD8, 0xFFFFF8F6, 0xFFFFB4AB)
+        "Yellow" -> listOf(0xFF8A5F00, 0xFFFFE9A8, 0xFFFFFBEE, 0xFFFFD166)
+        "Pink" -> listOf(0xFFB0135F, 0xFFFCDDEA, 0xFFFFF7FA, 0xFFFFB0D2)
+        else -> return null
+    }
+    return if (dark) darkColorScheme(
+        primary = Color(pd), onPrimary = Pop.Ink, secondary = Pop.Coral, onSecondary = Color.White, tertiary = Pop.Teal, onTertiary = Color.White,
+        background = Pop.Indigo, onBackground = Pop.Cream, surface = Pop.IndigoHi, onSurface = Pop.Cream,
+        surfaceVariant = Color(0xFF2A2724), onSurfaceVariant = Color(0xFFD6D0CC), secondaryContainer = Color(p).copy(alpha = .35f).compositeOverBlack(),
+        onSecondaryContainer = Pop.Cream, primaryContainer = Color(p).copy(alpha = .35f).compositeOverBlack(), onPrimaryContainer = Pop.Cream,
+        outline = Color(0xFF5A5450), outlineVariant = Color(0xFF332F2C)
+    ) else lightColorScheme(
+        primary = Color(p), onPrimary = Color.White, secondary = Pop.Coral, onSecondary = Color.White, tertiary = Pop.Teal, onTertiary = Color.White,
+        background = Color(bg), onBackground = Pop.Ink, surface = Color.White, onSurface = Pop.Ink,
+        surfaceVariant = Color(c).copy(alpha = .55f).compositeOver(Color.White), onSurfaceVariant = Color(0xFF45524A),
+        secondaryContainer = Color(c), onSecondaryContainer = Pop.Ink, primaryContainer = Color(c), onPrimaryContainer = Color(p),
+        outline = Color(0xFFCFC8C2), outlineVariant = Color(0xFFEAE4E0)
+    )
+}
+
+private fun Color.compositeOverBlack(): Color = this.compositeOver(Color(0xFF161412))
 
 private fun fallbackLight() = lightColorScheme(
     primary = Color(0xFF516E58), onPrimary = Color.White, secondary = Color(0xFFE2B650),

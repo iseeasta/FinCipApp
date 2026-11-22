@@ -198,7 +198,21 @@ fun AnalyticsOverview(
     val scheme = MaterialTheme.colorScheme
     val mask = "••••"
     fun m(v: Double) = if (privacy) mask else money(v, base)
+    val monthEnd = parseMonth(month)
+    val monthList = (5 downTo 0).map { monthEnd.minusMonths(it.toLong()) }
+    val incomeSeries = monthList.map { incomeTotal(workspace, it.toString()) }
+    val spendSeries = monthList.map { expenseTotal(workspace, it.toString()) }
     Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 28.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        petSlot()
+        if (txs.isNotEmpty()) {
+            val si = picked.coerceIn(0, 5)
+            val label = monthList[si].format(DateTimeFormatter.ofPattern("MMM", Locale.ENGLISH))
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                MiniStat("Outgoing · $label", if (privacy) mask else compactMoney(spendSeries[si], base), Periwinkle, Modifier.weight(1f)) { filter = "Outcome" }
+                MiniStat("Incoming · $label", if (privacy) mask else compactMoney(incomeSeries[si], base), Pop.Lime, Modifier.weight(1f)) { filter = "Income" }
+                MiniStat("Saved · $label", if (privacy) mask else compactMoney(incomeSeries[si] - spendSeries[si], base), Pop.Sun, Modifier.weight(1f)) { filter = "Savings" }
+            }
+        }
         Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             listOf("All", "Income", "Outcome", "Savings").forEach { PopChip(it, filter == it, { filter = it }) }
         }
@@ -223,10 +237,9 @@ fun AnalyticsOverview(
                 NeoOutlineButton("Import a statement", { onOpen("transactions") }, Modifier.fillMaxWidth())
             }
         } else {
-            val end = parseMonth(month)
-            val months = (5 downTo 0).map { end.minusMonths(it.toLong()) }
-            val income = months.map { incomeTotal(workspace, it.toString()) }
-            val spend = months.map { expenseTotal(workspace, it.toString()) }
+            val months = monthList
+            val income = incomeSeries
+            val spend = spendSeries
             val net = income.zip(spend).map { (a, b) -> (a - b).coerceAtLeast(0.0) }
             val series = when (filter) {
                 "Income" -> listOf(ChartSeries("Income", Pop.Lime, income))
@@ -241,11 +254,6 @@ fun AnalyticsOverview(
                 series = series, selected = sel,
                 bubble = if (privacy) mask else compactMoney(bubbleValue, base), onSelect = { picked = it }
             )
-            val selMonth = months[sel]
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                StatTile("Income · ${selMonth.format(DateTimeFormatter.ofPattern("MMM", Locale.ENGLISH))}", m(income[sel]), Pop.Lime, false, Modifier.weight(1f)) { filter = "Income" }
-                StatTile("Outcome · ${selMonth.format(DateTimeFormatter.ofPattern("MMM", Locale.ENGLISH))}", m(spend[sel]), Periwinkle, true, Modifier.weight(1f)) { filter = "Outcome" }
-            }
             // Month-over-month banner, only when the previous month has data to compare against.
             val prev = if (sel > 0) spend[sel - 1] else 0.0
             val cur = spend[sel]
@@ -267,29 +275,6 @@ fun AnalyticsOverview(
                 Icon(Icons.Default.ChevronRight, contentDescription = "Open insights", tint = Pop.Ink)
             }
 
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("Transactions history", Modifier.weight(1f), fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                Text("View all", Modifier.clip(RoundedCornerShape(50)).clickable { onOpen("transactions") }.padding(8.dp), color = scheme.primary, fontWeight = FontWeight.Bold, fontSize = 13.sp)
-            }
-            val shown = txs.filter { filter != "Income" || it.string("type") == "income" }.filter { filter != "Outcome" || it.string("type") != "income" }
-                .sortedByDescending { it.string("date") }.take(5)
-            shown.forEach { tx ->
-                val isIncome = tx.string("type") == "income"
-                val title = tx.string("title").ifBlank { tx.string("category", "Entry") }
-                Surface(Modifier.fillMaxWidth().clickable { onEditTx(tx) }, shape = RoundedCornerShape(20.dp), color = scheme.surface, border = BorderStroke(1.dp, scheme.outlineVariant)) {
-                    Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Box(Modifier.size(42.dp).clip(CircleShape).background(if (isIncome) Pop.Lime.copy(alpha = .9f) else Periwinkle), contentAlignment = Alignment.Center) {
-                            Text(title.take(1).uppercase(), fontWeight = FontWeight.Black, color = Pop.Ink)
-                        }
-                        Column(Modifier.weight(1f)) {
-                            Text(title, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            Text("${tx.string("category", "Other")} · ${tx.string("date")}", fontSize = 12.sp, color = scheme.onSurface.copy(alpha = .6f), maxLines = 1)
-                        }
-                        val amt = toBase(workspace, tx.double("amount"), tx.string("currency", "INR"))
-                        Text(if (privacy) mask else (if (isIncome) "+" else "−") + money(amt, base), fontWeight = FontWeight.Bold, color = if (isIncome) Pop.Teal else Pop.Coral, maxLines = 1)
-                    }
-                }
-            }
         }
 
         // Saving plans: ring + progress cards from the user's real goals.
@@ -323,7 +308,45 @@ fun AnalyticsOverview(
                 }
             }
         }
+        if (txs.isNotEmpty()) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("Transactions history", Modifier.weight(1f), fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                Text("View all", Modifier.clip(RoundedCornerShape(50)).clickable { onOpen("transactions") }.padding(8.dp), color = scheme.primary, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+            }
+            val shown = txs.filter { filter != "Income" || it.string("type") == "income" }.filter { filter != "Outcome" || it.string("type") != "income" }
+                .sortedByDescending { it.string("date") }.take(4)
+            shown.forEach { tx ->
+                val isIncome = tx.string("type") == "income"
+                val title = tx.string("title").ifBlank { tx.string("category", "Entry") }
+                Surface(Modifier.fillMaxWidth().clickable { onEditTx(tx) }, shape = RoundedCornerShape(20.dp), color = scheme.surface, border = BorderStroke(1.dp, scheme.outlineVariant)) {
+                    Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Box(Modifier.size(42.dp).clip(CircleShape).background(if (isIncome) Pop.Lime.copy(alpha = .9f) else Periwinkle), contentAlignment = Alignment.Center) {
+                            Text(title.take(1).uppercase(), fontWeight = FontWeight.Black, color = Pop.Ink)
+                        }
+                        Column(Modifier.weight(1f)) {
+                            Text(title, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text("${tx.string("category", "Other")} · ${tx.string("date")}", fontSize = 12.sp, color = scheme.onSurface.copy(alpha = .6f), maxLines = 1)
+                        }
+                        val amt = toBase(workspace, tx.double("amount"), tx.string("currency", "INR"))
+                        Text(if (privacy) mask else (if (isIncome) "+" else "−") + money(amt, base), fontWeight = FontWeight.Bold, color = if (isIncome) Pop.Teal else Pop.Coral, maxLines = 1)
+                    }
+                }
+            }
+        }
         NeoButton("+  New saving plan", Modifier.fillMaxWidth(), onNewGoal)
-        petSlot()
+    }
+}
+
+
+@Composable
+private fun MiniStat(label: String, value: String, tint: Color, modifier: Modifier, onClick: () -> Unit) {
+    val scheme = MaterialTheme.colorScheme
+    val tap = com.fincip.nativeapp.ui.rememberTap()
+    Surface(modifier.clickable { tap(); onClick() }, shape = RoundedCornerShape(20.dp), color = scheme.surface, border = BorderStroke(1.dp, scheme.outlineVariant)) {
+        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Box(Modifier.size(10.dp).clip(CircleShape).background(tint))
+            Text(value, fontWeight = FontWeight.Black, fontSize = 17.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(label, fontSize = 11.sp, color = scheme.onSurface.copy(alpha = .65f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
     }
 }

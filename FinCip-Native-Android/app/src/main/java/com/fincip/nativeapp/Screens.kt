@@ -111,14 +111,19 @@ private val Red = Color(0xFFD66B67)
 private val Gold = Color(0xFFE7B83F)
 private val Blue = Color(0xFF579CD4)
 
+/** True when a screen is shown inside the Profile hub, which already scrolls and has its own header. */
+val LocalEmbedded = androidx.compose.runtime.compositionLocalOf { false }
+
 @Composable
 private fun PageColumn(content: @Composable ColumnScope.() -> Unit) {
-    Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(14.dp), content = content)
+    if (LocalEmbedded.current) Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(14.dp), content = content)
+    else Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(14.dp), content = content)
 }
 
 /** Soft header card: pale green block with leaf blobs, big title, short description and the FinCip mark. */
 @Composable
 private fun PageHeading(eyebrow: String, title: String, description: String = "") {
+    if (LocalEmbedded.current) return
     val fill = MaterialTheme.colorScheme.primaryContainer
     val fg = MaterialTheme.colorScheme.onPrimaryContainer
     Box(
@@ -273,20 +278,7 @@ fun OverviewScreen(workspace: JsonObject, month: String, privacy: Boolean, savin
             val streak = entryStreak(workspace)
             val xp = allTransactions.size * 10 + workspace.arrayOrEmpty("budgets").size() * 25 + workspace.arrayOrEmpty("goals").size() * 25 + workspace.arrayOrEmpty("financeProducts").size() * 25 + (if (achievedGoal) 200 else 0)
             val level = xp / 100 + 1
-            NeoCard(fill = Pop.Lavender) {
-                Row(Modifier.clickable(onClick = onMascot), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                    PetBlob(accent = mascotAccent, mood = petMood, diameter = 112.dp)
-                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Text(pet.string("name", "Mochi"), fontWeight = FontWeight.Black, fontSize = 20.sp, color = Pop.Ink, maxLines = 1)
-                            Text("LVL $level", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Black, color = Pop.Cream, modifier = Modifier.clip(RoundedCornerShape(50)).background(Pop.Ink).padding(horizontal = 9.dp, vertical = 4.dp))
-                        }
-                        Text(mood, color = Pop.Ink.copy(alpha = .85f), style = MaterialTheme.typography.bodySmall, maxLines = 3)
-                        ProgressBar((xp % 100) / 100f, Pop.Ink)
-                        Text("${xp % 100} / 100 XP · ${if (streak > 0) "$streak-day streak" else "log something to start a streak"}", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = Pop.Ink)
-                    }
-                }
-            }
+            PetHomeCard(workspace, petMood, mood, streak, onMascot)
         }
     }
 }
@@ -1128,12 +1120,12 @@ fun SecurityScreen(workspace: JsonObject, onPrivacy: (Boolean) -> Unit, onImport
 }
 
 @Composable
-fun SettingsScreen(workspace: JsonObject, vibe: String, onVibe: (String) -> Unit, dark: Boolean, onDark: (Boolean) -> Unit, onBaseCurrency: (String) -> Unit, petName: String, onPetName: (String) -> Unit, petKind: String, onPetKind: (String) -> Unit, petAccent: String, onPetAccent: (String) -> Unit, onCsv: () -> Unit, onPdf: () -> Unit, dashboardOrder: List<String>, onDashboardOrder: (List<String>) -> Unit) {
+fun SettingsScreen(workspace: JsonObject, vibe: String, onVibe: (String) -> Unit, dark: Boolean, onDark: (Boolean) -> Unit, onBaseCurrency: (String) -> Unit, onCsv: () -> Unit, onPdf: () -> Unit, dashboardOrder: List<String>, onDashboardOrder: (List<String>) -> Unit, onPrivacyDefault: (Boolean) -> Unit = {}, sound: Boolean = true, onSound: (Boolean) -> Unit = {}, haptic: Boolean = true, onHaptic: (Boolean) -> Unit = {}) {
     val base = workspace.objectOrEmpty("settings").string("baseCurrency", "INR")
     val dashboardLabels = mapOf("balance" to "Total balance", "income" to "Monthly income", "expenses" to "Monthly spending", "savings" to "Savings rate")
     val visibleDashboardOrder = (dashboardOrder.filter { it in dashboardLabels.keys }.distinct() + dashboardLabels.keys.filterNot { it in dashboardOrder }).take(4)
     PageColumn {
-        PageHeading("MAKE THE APP FEEL LIKE YOURS", "Set your FinCip vibe.", "Material You dynamic color, playful palettes, and a mascot that grows with your habits.")
+        PageHeading("MAKE THE APP FEEL LIKE YOURS", "Set your FinCip vibe.", "Theme style, dashboard layout, currency, sound and privacy.")
         NeoCard {
             Text("Vibe themes", fontWeight = FontWeight.Black, style = MaterialTheme.typography.titleLarge)
             listOf("Leaf", "Material You", "Y2K Acid", "Cozy Lo-Fi", "Receipt Paper").forEach { item -> Row(Modifier.fillMaxWidth().clickable { onVibe(item) }.padding(vertical = 7.dp), verticalAlignment = Alignment.CenterVertically) { Text(if (vibe == item) "●" else "○", Modifier.padding(end = 9.dp), color = MaterialTheme.colorScheme.primary); Column(Modifier.weight(1f)) { Text(item, fontWeight = FontWeight.Bold); Text(when (item) { "Material You" -> "Use Android wallpaper colours on Android 12+"; "Y2K Acid" -> "Acid lime, pink and electric blue"; "Cozy Lo-Fi" -> "Warm paper, clay and olive"; else -> "Thermal receipt paper and monospace details" }, style = MaterialTheme.typography.labelSmall) } } }
@@ -1162,12 +1154,15 @@ fun SettingsScreen(workspace: JsonObject, vibe: String, onVibe: (String) -> Unit
             Text("Add missing conversion assumptions in Money → Currency converter.", style = MaterialTheme.typography.bodySmall)
         }
         NeoCard {
-            Row(verticalAlignment = Alignment.CenterVertically) { Text("${petKind}  ${petName}", fontSize = 28.sp); Spacer(Modifier.weight(1f)); SmallPill("MASCOT") }
-            Text("Customize your finance companion", fontWeight = FontWeight.Black)
-            Field("Mascot name", petName, onPetName)
-            Selector("Character", petKind, listOf("🐱", "🤖", "🌱", "🦊", "🐸", "🐼", "🐙"), onPetKind)
-            Selector("Accent color", petAccent, listOf("#D8FF3E", "#FF83D1", "#7DC6FF", "#E8B86B", "#A7D9A5"), onPetAccent)
-            Text("The mascot is cheerful when your savings rate is healthy and switches to ramen mode when takeout exceeds its food budget.", style = MaterialTheme.typography.bodySmall)
+            Text("Sound & touch", fontWeight = FontWeight.Black, style = MaterialTheme.typography.titleLarge)
+            Row(verticalAlignment = Alignment.CenterVertically) { Column(Modifier.weight(1f)) { Text("Tap sounds", fontWeight = FontWeight.Bold); Text("Soft click when you press buttons and tabs.", style = MaterialTheme.typography.bodySmall) }; androidx.compose.material3.Switch(sound, onSound) }
+            Row(verticalAlignment = Alignment.CenterVertically) { Column(Modifier.weight(1f)) { Text("Haptic feedback", fontWeight = FontWeight.Bold); Text("A light vibration on taps.", style = MaterialTheme.typography.bodySmall) }; androidx.compose.material3.Switch(haptic, onHaptic) }
+            Text("Tap sounds also follow your phone's Touch sounds setting.", style = MaterialTheme.typography.labelSmall)
+        }
+        NeoCard {
+            Text("Privacy defaults", fontWeight = FontWeight.Black, style = MaterialTheme.typography.titleLarge)
+            val privacyOn = workspace.objectOrEmpty("settings").bool("privacyMode")
+            Row(verticalAlignment = Alignment.CenterVertically) { Column(Modifier.weight(1f)) { Text("Hide amounts", fontWeight = FontWeight.Bold); Text("Mask balances and totals on every screen.", style = MaterialTheme.typography.bodySmall) }; androidx.compose.material3.Switch(privacyOn, onPrivacyDefault) }
         }
         NeoCard {
             Text("Portable reports", fontWeight = FontWeight.Black, style = MaterialTheme.typography.titleLarge)

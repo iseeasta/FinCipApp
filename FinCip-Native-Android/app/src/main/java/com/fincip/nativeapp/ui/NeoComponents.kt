@@ -97,8 +97,9 @@ fun NeoButton(text: String, modifier: Modifier = Modifier, onClick: () -> Unit, 
     val source = remember { MutableInteractionSource() }
     val pressed by source.collectIsPressedAsState()
     val scale by animateFloatAsState(if (pressed) 0.97f else 1f, tween(90), label = "press")
+    val tap = rememberTap()
     Button(
-        onClick = onClick,
+        onClick = { tap(); onClick() },
         enabled = enabled,
         interactionSource = source,
         modifier = modifier.scale(scale).height(52.dp),
@@ -113,8 +114,9 @@ fun NeoOutlineButton(text: String, onClick: () -> Unit, modifier: Modifier = Mod
     val source = remember { MutableInteractionSource() }
     val pressed by source.collectIsPressedAsState()
     val scale by animateFloatAsState(if (pressed) 0.97f else 1f, tween(90), label = "press")
+    val tap = rememberTap()
     OutlinedButton(
-        onClick = onClick,
+        onClick = { tap(); onClick() },
         interactionSource = source,
         modifier = modifier.scale(scale).height(48.dp),
         shape = RoundedCornerShape(50),
@@ -128,8 +130,9 @@ fun NeoOutlineButton(text: String, onClick: () -> Unit, modifier: Modifier = Mod
 fun PopChip(text: String, selected: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier, leading: ImageVector? = null) {
     val bg = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
     val fg = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
+    val tap = rememberTap()
     Surface(
-        onClick = onClick,
+        onClick = { tap(); onClick() },
         modifier = modifier,
         shape = RoundedCornerShape(50),
         color = bg,

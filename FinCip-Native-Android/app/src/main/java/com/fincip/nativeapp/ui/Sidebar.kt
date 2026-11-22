@@ -198,12 +198,6 @@ fun FinCipSidebar(
                         }
                     }
                 }
-                if (settingsPages.isNotEmpty()) {
-                    Spacer(Modifier.height(6.dp))
-                    Box(Modifier.fillMaxWidth().height(1.dp).background(scheme.outlineVariant))
-                    SectionLabel("Settings")
-                    settingsPages.forEach { pg -> TopItem(pageIcon(pg.id), pg.title, pg.id == selectedPage, onClick = { onSelect(pg) }) }
-                }
             }
             Box(Modifier.fillMaxWidth().height(1.dp).background(scheme.outlineVariant))
             Row(Modifier.fillMaxWidth().padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -224,8 +218,9 @@ private fun TopItem(icon: ImageVector, label: String, selected: Boolean, trailin
     val scheme = MaterialTheme.colorScheme
     val bg by animateColorAsState(if (selected) scheme.primary else Color.Transparent, tween(160), label = "tiBg")
     val rotation by animateFloatAsState(if (trailing == true) 180f else 0f, tween(200), label = "chev")
+    val tap = rememberTap()
     Row(
-        Modifier.fillMaxWidth().height(46.dp).clip(RoundedCornerShape(14.dp)).background(bg).clickable(role = Role.Button, onClick = onClick).padding(horizontal = 10.dp),
+        Modifier.fillMaxWidth().height(46.dp).clip(RoundedCornerShape(14.dp)).background(bg).clickable(role = Role.Button, onClick = { tap(); onClick() }).padding(horizontal = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Icon(icon, contentDescription = null, tint = if (selected) scheme.onPrimary else scheme.onSurface.copy(alpha = .75f), modifier = Modifier.size(21.dp))
@@ -240,8 +235,9 @@ private fun SubItem(icon: ImageVector, label: String, selected: Boolean, onClick
     val scheme = MaterialTheme.colorScheme
     val bg by animateColorAsState(if (selected) scheme.primary else Color.Transparent, tween(160), label = "siBg")
     val fg = if (selected) scheme.onPrimary else scheme.onSurface.copy(alpha = .8f)
+    val tap = rememberTap()
     Row(
-        Modifier.fillMaxWidth().height(40.dp).clip(RoundedCornerShape(12.dp)).background(bg).clickable(role = Role.Tab, onClick = onClick).padding(horizontal = 10.dp),
+        Modifier.fillMaxWidth().height(40.dp).clip(RoundedCornerShape(12.dp)).background(bg).clickable(role = Role.Tab, onClick = { tap(); onClick() }).padding(horizontal = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Icon(icon, contentDescription = null, tint = fg, modifier = Modifier.size(18.dp))
@@ -253,8 +249,9 @@ private fun SubItem(icon: ImageVector, label: String, selected: Boolean, onClick
 @Composable
 private fun QuickAction(icon: ImageVector, label: String, modifier: Modifier, onClick: () -> Unit) {
     val scheme = MaterialTheme.colorScheme
+    val tap = rememberTap()
     Row(
-        modifier.clip(RoundedCornerShape(14.dp)).background(scheme.surfaceVariant).clickable(role = Role.Button, onClick = onClick).padding(horizontal = 12.dp, vertical = 11.dp),
+        modifier.clip(RoundedCornerShape(14.dp)).background(scheme.surfaceVariant).clickable(role = Role.Button, onClick = { tap(); onClick() }).padding(horizontal = 12.dp, vertical = 11.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         Icon(icon, contentDescription = null, tint = scheme.onSurface, modifier = Modifier.size(18.dp))

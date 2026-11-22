@@ -31,7 +31,13 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.animation.Crossfade
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.togetherWith
+import com.fincip.nativeapp.ui.Feedback
+import com.fincip.nativeapp.ui.LockScreen
+import com.fincip.nativeapp.data.AppIcons
+import com.fincip.nativeapp.data.AppLock
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.tween
@@ -203,6 +209,25 @@ private fun FinCipApp(store: FinanceStore, securePrefs: SecurePrefs) {
     var group by remember { mutableStateOf("Home") }
     var sidebarExpanded by remember { mutableStateOf(context.resources.configuration.screenWidthDp >= 600 && context.getSharedPreferences("fincip_ui", 0).getBoolean("sidebar_expanded", true)) }
     var editingProfile by remember { mutableStateOf(false) }
+    var accent by remember { mutableStateOf(context.getSharedPreferences("fincip_ui", 0).getString("accent", "Green") ?: "Green") }
+    var appIcon by remember { mutableStateOf(AppIcons.current(context)) }
+    var soundOn by remember { mutableStateOf(context.getSharedPreferences("fincip_ui", 0).getBoolean("sfx", true)) }
+    var hapticOn by remember { mutableStateOf(context.getSharedPreferences("fincip_ui", 0).getBoolean("haptic", true)) }
+    Feedback.sound = soundOn; Feedback.haptic = hapticOn
+    var locked by remember { mutableStateOf(AppLock.lockEnabled(context)) }
+    fun applySecure(on: Boolean) { (context as? Activity)?.window?.let { w -> if (on) w.addFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE) else w.clearFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE) } }
+    androidx.compose.runtime.DisposableEffect(Unit) {
+        applySecure(AppLock.blockScreenshots(context))
+        var stoppedAt = 0L
+        val owner = (context as? androidx.activity.ComponentActivity)
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_STOP) stoppedAt = android.os.SystemClock.elapsedRealtime()
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_START && stoppedAt > 0 && AppLock.lockEnabled(context) &&
+                android.os.SystemClock.elapsedRealtime() - stoppedAt >= AppLock.timeoutSeconds(context) * 1000L) locked = true
+        }
+        owner?.lifecycle?.addObserver(observer)
+        onDispose { owner?.lifecycle?.removeObserver(observer) }
+    }
     var month by remember { mutableStateOf(currentMonth()) }
     var showEntry by remember { mutableStateOf(false) }
     var showBackupPassword by remember { mutableStateOf(false) }
@@ -294,6 +319,8 @@ private fun FinCipApp(store: FinanceStore, securePrefs: SecurePrefs) {
         workspace = next
         scope.launch(Dispatchers.IO) { runCatching { store.saveWorkspace(next.toString()) } }
     }
+    fun updateProfile(block: JsonObject.() -> Unit) = updateWorkspace { root -> val p = root.objectOrEmpty("profile"); p.block(); root.add("profile", p) }
+    fun updateMascot(block: JsonObject.() -> Unit) = updateWorkspace { root -> val p = root.objectOrEmpty("mascot"); p.block(); root.add("mascot", p) }
 
     fun replaceWorkspace(imported: JsonObject) {
         val next = mergeDefaults(imported)
@@ -665,13 +692,13 @@ private fun FinCipApp(store: FinanceStore, securePrefs: SecurePrefs) {
         }
     }
     fun saveProfile(d: ProfileData) {
-        updateWorkspace { root -> root.add("profile", JsonObject().apply { addProperty("name", d.name); addProperty("handle", d.handle); addProperty("tagline", d.tagline); addProperty("avatarSeed", d.seed) }) }
+        updateWorkspace { root -> root.add("profile", JsonObject().apply { addProperty("name", d.name); addProperty("handle", d.handle); addProperty("tagline", d.tagline); addProperty("avatarSeed", d.seed); addProperty("joined", java.time.LocalDate.now().toString()) }) }
     }
     fun startVoice() { runCatching { voiceLauncher.launch(Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM).putExtra(RecognizerIntent.EXTRA_PROMPT, "Describe your money move")) }.onFailure { notify("Voice input is not available on this device") } }
     val notificationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
     LaunchedEffect(Unit) { if (Build.VERSION.SDK_INT >= 33) notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS) }
 
-    FinCipTheme(vibe, dark || (page == "overview" && vibe == "Leaf")) {
+    FinCipTheme(vibe, dark || (page == "overview" && vibe == "Leaf"), accent) {
         val lightBars = MaterialTheme.colorScheme.background.luminance() > 0.5f
         SideEffect {
             (context as? Activity)?.window?.let { w ->
@@ -680,7 +707,9 @@ private fun FinCipApp(store: FinanceStore, securePrefs: SecurePrefs) {
                 controller.isAppearanceLightNavigationBars = lightBars
             }
         }
-        if (loading) {
+        if (locked) {
+            LockScreen(onUnlocked = { locked = false })
+        } else if (loading) {
             Box(Modifier.fillMaxSize().background(Color(0xFFF6F5EF)), contentAlignment = Alignment.Center) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(14.dp)) {
                     FinCipMark(size = 96.dp, glyph = FinCipInk)
@@ -716,7 +745,7 @@ private fun FinCipApp(store: FinanceStore, securePrefs: SecurePrefs) {
                     ) {
                         FinCipMark(Modifier.clip(RoundedCornerShape(10.dp)).clickable(onClickLabel = "Show sidebar") { toggleSidebar() }, size = 38.dp)
                         Column(Modifier.weight(1f).padding(start = 4.dp)) {
-                            Text(NAV_PAGES.firstOrNull { it.id == page }?.title ?: (if (page == "profile") "Profile" else "FinCip"), fontWeight = FontWeight.Black, fontSize = 22.sp, letterSpacing = (-0.5).sp, maxLines = 1)
+                            Text(if (page in setOf("profile", "settings", "security", "customize")) "Profile" else (NAV_PAGES.firstOrNull { it.id == page }?.title ?: "FinCip"), fontWeight = FontWeight.Black, fontSize = 22.sp, letterSpacing = (-0.5).sp, maxLines = 1)
                             Text(LocalDate.now().format(DateTimeFormatter.ofPattern("EEE, d MMM", Locale.ENGLISH)).uppercase(), style = MaterialTheme.typography.labelSmall, letterSpacing = 1.2.sp, color = MaterialTheme.colorScheme.onBackground.copy(alpha = .6f), maxLines = 1)
                         }
                         IconButton(modifier = Modifier.size(42.dp).background(MaterialTheme.colorScheme.surface, CircleShape), onClick = { updateWorkspace { root -> val settings = root.objectOrEmpty("settings"); settings.addProperty("privacyMode", !settings.bool("privacyMode")); root.add("settings", settings) } }) { Icon(if (privacy) Icons.Default.VisibilityOff else Icons.Default.Visibility, contentDescription = "Toggle privacy", modifier = Modifier.size(20.dp)) }
@@ -728,9 +757,9 @@ private fun FinCipApp(store: FinanceStore, securePrefs: SecurePrefs) {
                 }
             ) { innerPadding ->
                 Column(Modifier.fillMaxSize().padding(innerPadding).navigationBarsPadding()) {
-                    Crossfade(targetState = page, animationSpec = tween(180), label = "page") { currentPage ->
+                    AnimatedContent(targetState = page, transitionSpec = { (fadeIn(tween(240, delayMillis = 70)) + slideInVertically(tween(280)) { it / 18 }) togetherWith fadeOut(tween(120)) }, label = "page") { currentPage ->
                     when (currentPage) {
-                        "overview" -> OverviewScreen(workspace, month, privacy, savingsRate, balance, onAdd = { openForm("transaction") }, onMascot = { group = "Explore"; page = "settings" }, onOpen = { id -> NAV_PAGES.firstOrNull { it.id == id }?.let { group = it.group; page = it.id } }, onNewGoal = { openForm("goal") }, onEditTx = { openForm("transaction", it) })
+                        "overview" -> OverviewScreen(workspace, month, privacy, savingsRate, balance, onAdd = { openForm("transaction") }, onMascot = { page = "customize" }, onOpen = { id -> NAV_PAGES.firstOrNull { it.id == id }?.let { group = it.group; page = it.id } }, onNewGoal = { openForm("goal") }, onEditTx = { openForm("transaction", it) })
                         "transactions" -> TransactionsScreen(workspace, month, privacy, transactionQuery, { transactionQuery = it }, { openForm("transaction") }, { openForm("transaction", it) }, { deleteFromArray("transactions", it.string("id")) }, { statementLauncher.launch(arrayOf("text/*", "application/octet-stream")) }, { exportCsvLauncher.launch("FinCip-transactions.csv") })
                         "recurring" -> RecurringScreen(workspace, privacy, { openForm("bill") }, { deleteFromArray("recurringRules", it.string("id")) }, { markRecurringPaid(it) })
                         "calendar" -> CalendarScreen(workspace, month, { month = it })
@@ -847,23 +876,33 @@ private fun FinCipApp(store: FinanceStore, securePrefs: SecurePrefs) {
                                 }
                             }, onSignOut = { securePrefs.clearSession(); session = securePrefs.readSupabase(); notify("Signed out") }
                         )
-                        "profile" -> ProfileScreen(workspace, { editingProfile = true }, { group = "Explore"; page = "security" })
-                        "security" -> SecurityScreen(workspace, { updateWorkspace { root -> val settings = root.objectOrEmpty("settings"); settings.addProperty("privacyMode", it); root.add("settings", settings) } }, { backupImportLauncher.launch(arrayOf("application/json", "text/*")) }, { backupPasswordDialog = true }, {
-                            val pack = JsonObject().apply { addProperty("app", "FinCip"); addProperty("version", 5); addProperty("exportedAt", isoToday()); add("data", workspace.deepCopyObject()) }
-                            pendingExport = pack.toString(); exportJsonLauncher.launch("FinCip-backup.json")
-                        })
-                        "settings" -> SettingsScreen(
+"profile", "settings", "security", "customize" -> ProfileHub(
+                            workspace, initialTab = when (currentPage) { "settings" -> 1; "security" -> 2; "customize" -> 3; else -> 0 },
+                            onProfileChange = { block -> updateProfile(block) }, onPetChange = { block -> updateMascot(block) },
+                            accent = accent, onAccent = { accent = it; context.getSharedPreferences("fincip_ui", 0).edit().putString("accent", it).apply() },
+                            appIcon = appIcon, onAppIcon = { appIcon = it; AppIcons.apply(context, it) },
+                            onBlockScreens = { applySecure(it) },
+                            settingsContent = {
+                                SettingsScreen(
                             workspace, vibe, { vibe = it; context.getSharedPreferences("fincip_ui", 0).edit().putString("vibe", it).apply() },
                             dark, { dark = it; context.getSharedPreferences("fincip_ui", 0).edit().putBoolean("dark", it).apply() },
                             { code -> updateWorkspace { root -> val settings = root.objectOrEmpty("settings"); settings.addProperty("baseCurrency", code); root.add("settings", settings) } },
-                            petName, { petName = it; updateWorkspace { root -> val pet = root.objectOrEmpty("mascot"); pet.addProperty("name", it); root.add("mascot", pet) } },
-                            petKind, { petKind = it; updateWorkspace { root -> val pet = root.objectOrEmpty("mascot"); pet.addProperty("kind", it); root.add("mascot", pet) } },
-                            petAccent, { petAccent = it; updateWorkspace { root -> val pet = root.objectOrEmpty("mascot"); pet.addProperty("accent", it); root.add("mascot", pet) } },
                             { exportCsvLauncher.launch("FinCip-transactions.csv") }, { exportPdfLauncher.launch("FinCip-report.pdf") },
                             dashboardOrder = workspace.objectOrEmpty("settings").arrayOrEmpty("dashboardOrder").map { it.asStringOr() }.ifEmpty { listOf("balance", "income", "expenses", "savings") },
-                            onDashboardOrder = { order -> updateWorkspace { root -> val settings = root.objectOrEmpty("settings"); settings.add("dashboardOrder", JsonArray().apply { order.forEach(::add) }); root.add("settings", settings) } }
+                            onDashboardOrder = { order -> updateWorkspace { root -> val settings = root.objectOrEmpty("settings"); settings.add("dashboardOrder", JsonArray().apply { order.forEach(::add) }); root.add("settings", settings) } },
+                            onPrivacyDefault = { on -> updateWorkspace { root -> val settings = root.objectOrEmpty("settings"); settings.addProperty("privacyMode", on); root.add("settings", settings) } },
+                            sound = soundOn, onSound = { soundOn = it; Feedback.sound = it; context.getSharedPreferences("fincip_ui", 0).edit().putBoolean("sfx", it).apply() },
+                            haptic = hapticOn, onHaptic = { hapticOn = it; Feedback.haptic = it; context.getSharedPreferences("fincip_ui", 0).edit().putBoolean("haptic", it).apply() }
+                                )
+                            },
+                            securityContent = {
+                                SecurityScreen(workspace, { updateWorkspace { root -> val settings = root.objectOrEmpty("settings"); settings.addProperty("privacyMode", it); root.add("settings", settings) } }, { backupImportLauncher.launch(arrayOf("application/json", "text/*")) }, { backupPasswordDialog = true }, {
+                            val pack = JsonObject().apply { addProperty("app", "FinCip"); addProperty("version", 5); addProperty("exportedAt", isoToday()); add("data", workspace.deepCopyObject()) }
+                            pendingExport = pack.toString(); exportJsonLauncher.launch("FinCip-backup.json")
+                        })
+                            }
                         )
-                        else -> OverviewScreen(workspace, month, privacy, savingsRate, balance, onAdd = { openForm("transaction") }, onMascot = { group = "Explore"; page = "settings" })
+                        else -> OverviewScreen(workspace, month, privacy, savingsRate, balance, onAdd = { openForm("transaction") }, onMascot = { page = "customize" })
                     }
                     }
                 }
@@ -888,7 +927,7 @@ private fun FinCipApp(store: FinanceStore, securePrefs: SecurePrefs) {
 
     if (editingProfile) {
         androidx.compose.ui.window.Dialog(onDismissRequest = { editingProfile = false }, properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)) {
-            FinCipTheme(vibe, dark) {
+            FinCipTheme(vibe, dark, accent) {
                 Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).statusBarsPadding()) {
                     ProfileForm(profileOf(workspace), "Save profile", { saveProfile(it); editingProfile = false }, onCancel = { editingProfile = false })
                 }
