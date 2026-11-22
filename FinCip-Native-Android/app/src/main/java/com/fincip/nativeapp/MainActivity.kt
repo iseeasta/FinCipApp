@@ -704,7 +704,6 @@ private fun FinCipApp(store: FinanceStore, securePrefs: SecurePrefs) {
                 },
 
             ) { innerPadding ->
-            }
                 Column(Modifier.fillMaxSize().padding(innerPadding)) {
                     when (page) {
                         "profile" -> ProfileScreen(workspace, privacy, onSettings = { page = "settings" }, onSecurity = { page = "security" }, onExport = { page = "security" })
