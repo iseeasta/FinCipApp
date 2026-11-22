@@ -498,7 +498,7 @@ fun CurrencyScreen(workspace: JsonObject, applyChange: ((JsonObject) -> Unit) ->
                     PopField(value = text, onValueChange = { text = it }, modifier = Modifier.width(140.dp), singleLine = true, label = { Text("INR for 1 unit") }, enabled = info.code != "INR")
                     TextButtonTiny("Save") {
                         val v = text.toDoubleOrNull() ?: return@TextButtonTiny
-                        applyChange { root: JsonObject -> val s = root.objectOrEmpty("settings"); val fx = s.objectOrEmpty("fxRates"); fx.addProperty(info.code, if (info.code == "INR") 1.0 else v); s.add("fxRates", fx); root.add("settings", s) }
+                        applyChange(fun(root: JsonObject) { val s = root.objectOrEmpty("settings"); val fx = s.objectOrEmpty("fxRates"); fx.addProperty(info.code, if (info.code == "INR") 1.0 else v); s.add("fxRates", fx); root.add("settings", s) })
                     }
                 }
                 Divider(Modifier.padding(vertical = 5.dp))
