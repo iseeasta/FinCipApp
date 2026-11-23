@@ -6,6 +6,7 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import androidx.activity.enableEdgeToEdge
 import android.speech.RecognizerIntent
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -74,6 +75,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Explore
@@ -182,8 +184,23 @@ import kotlin.math.max
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        enableEdgeToEdge()
+        window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE)
         scheduleReminders()
         setContent { FinCipApp(FinanceStore(applicationContext), SecurePrefs(applicationContext)) }
+    }
+
+    override fun onPause() {
+        super.onPause()
+        // Recents preview: blur the whole window when the user turned on "Blur in recent apps".
+        if (android.os.Build.VERSION.SDK_INT >= 31 && AppLock.blockScreenshots(this)) {
+            window.decorView.setRenderEffect(android.graphics.RenderEffect.createBlurEffect(60f, 60f, android.graphics.Shader.TileMode.CLAMP))
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (android.os.Build.VERSION.SDK_INT >= 31) window.decorView.setRenderEffect(null)
     }
 
     private fun scheduleReminders() {
@@ -216,12 +233,16 @@ private fun FinCipApp(store: FinanceStore, securePrefs: SecurePrefs) {
     var hapticOn by remember { mutableStateOf(context.getSharedPreferences("fincip_ui", 0).getBoolean("haptic", true)) }
     Feedback.sound = soundOn; Feedback.haptic = hapticOn
     var locked by remember { mutableStateOf(AppLock.lockEnabled(context)) }
-    fun applySecure(on: Boolean) { (context as? Activity)?.window?.let { w -> if (on) w.addFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE) else w.clearFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE) } }
+    var covered by remember { mutableStateOf(false) }
+    // "Blur in recent apps" no longer uses FLAG_SECURE (that made the preview solid black); the cover and blur are drawn instead.
+    fun applySecure(@Suppress("UNUSED_PARAMETER") on: Boolean) { (context as? Activity)?.window?.clearFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE) }
     androidx.compose.runtime.DisposableEffect(Unit) {
         applySecure(AppLock.blockScreenshots(context))
         var stoppedAt = 0L
         val owner = (context as? androidx.activity.ComponentActivity)
         val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_PAUSE) covered = AppLock.blockScreenshots(context)
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) covered = false
             if (event == androidx.lifecycle.Lifecycle.Event.ON_STOP) stoppedAt = android.os.SystemClock.elapsedRealtime()
             if (event == androidx.lifecycle.Lifecycle.Event.ON_START && stoppedAt > 0 && AppLock.lockEnabled(context) &&
                 android.os.SystemClock.elapsedRealtime() - stoppedAt >= AppLock.timeoutSeconds(context) * 1000L) locked = true
@@ -749,7 +770,8 @@ private fun FinCipApp(store: FinanceStore, securePrefs: SecurePrefs) {
                         Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        FinCipMark(Modifier.clip(RoundedCornerShape(10.dp)).clickable(onClickLabel = "Show sidebar") { toggleSidebar() }, size = 38.dp)
+                        IconButton(modifier = Modifier.size(42.dp).background(MaterialTheme.colorScheme.surface, CircleShape), onClick = { toggleSidebar() }) { Icon(androidx.compose.material.icons.Icons.Default.Menu, contentDescription = "Open menu") }
+                        FinCipMark(Modifier.clip(RoundedCornerShape(10.dp)).clickable(onClickLabel = "Show sidebar") { toggleSidebar() }, size = 34.dp)
                         Column(Modifier.weight(1f).padding(start = 4.dp)) {
                             Text(when (page.substringBefore(":")) { "profile" -> "Profile"; "settings" -> "Settings"; "security" -> "Privacy & security"; "customize" -> "Customization"; else -> null } ?: (NAV_PAGES.firstOrNull { it.id == page }?.title ?: "FinCip"), fontWeight = FontWeight.Black, fontSize = 22.sp, letterSpacing = (-0.5).sp, maxLines = 1)
                             Text(LocalDate.now().format(DateTimeFormatter.ofPattern("EEE, d MMM", Locale.ENGLISH)).uppercase(), style = MaterialTheme.typography.labelSmall, letterSpacing = 1.2.sp, color = MaterialTheme.colorScheme.onBackground.copy(alpha = .6f), maxLines = 1)
@@ -934,6 +956,7 @@ private fun FinCipApp(store: FinanceStore, securePrefs: SecurePrefs) {
               )
             }
         }
+        if (covered) PrivacyCover()
     }
 
     if (editingProfile) {
@@ -1041,6 +1064,21 @@ private fun transactionFingerprint(t: JsonObject): String = listOf(
     t.string("date"), t.string("type"), "%.2f".format(Locale.US, t.double("amount")),
     t.string("currency", "INR").uppercase(Locale.ROOT), t.string("title").trim().lowercase(Locale.ROOT)
 ).joinToString("|")
+
+@Composable
+private fun PrivacyCover() {
+    val scheme = MaterialTheme.colorScheme
+    val soft = Build.VERSION.SDK_INT >= 31
+    Box(
+        Modifier.fillMaxSize().background(androidx.compose.ui.graphics.Brush.linearGradient(listOf(scheme.primary.copy(alpha = if (soft) .5f else 1f), scheme.tertiary.copy(alpha = if (soft) .4f else 1f), scheme.background.copy(alpha = if (soft) .55f else 1f)))),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            FinCipMark(size = 88.dp)
+            Text("FinCip", fontWeight = FontWeight.Black, fontSize = 30.sp, color = scheme.onBackground)
+        }
+    }
+}
 
 @Composable
 private fun MonthMenu(month: String, activeMonths: Set<String>, onSelect: (String) -> Unit) {

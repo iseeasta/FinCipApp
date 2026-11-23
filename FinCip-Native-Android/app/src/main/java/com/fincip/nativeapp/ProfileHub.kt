@@ -344,7 +344,7 @@ private fun LockCard(onBlockScreens: (Boolean) -> Unit) {
         }
     }
     NeoCard {
-        SwitchRow("Hide in app switcher", "Blocks screenshots and blanks FinCip in recent apps.", secure) { secure = it; AppLock.setBlockScreenshots(context, it); onBlockScreens(it) }
+        SwitchRow("Blur in recent apps", "Shows a blurred cover instead of your numbers in the app switcher.", secure) { secure = it; AppLock.setBlockScreenshots(context, it); onBlockScreens(it) }
     }
 }
 
@@ -642,33 +642,6 @@ private fun ProfilePage(workspace: JsonObject, onProfileChange: (JsonObject.() -
             unlockedAcc.forEach { Text(it.first, Modifier.clip(RoundedCornerShape(50)).background(scheme.surfaceVariant.copy(alpha = .7f)).padding(horizontal = 12.dp, vertical = 6.dp), fontSize = 12.sp) }
         }
         if (nextAcc != null) Text("Next unlock: ${nextAcc.first} at level ${nextAcc.second}", Modifier.padding(top = 8.dp), fontSize = 12.sp, color = scheme.onSurface.copy(alpha = .55f))
-    }
-
-    // ── Account & preferences
-    PHeader("Account & preferences")
-    PCard {
-        val rows = listOf(
-            Triple("Personal information", "Name, username, photo, banner", { editing = true }),
-            Triple("Security & privacy", "App lock, biometrics, hide in recents", { onNavigate("security") }),
-            Triple("Notifications", "Bill reminder permissions", {
-                runCatching { context.startActivity(android.content.Intent(android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, context.packageName).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)) }
-                Unit
-            }),
-            Triple("Colours, icon & companion", "Make FinCip look like you", { onNavigate("customize") }),
-            Triple("Backup & restore", "Encrypted backups of your data", { onNavigate("security") }),
-            Triple("Import & export", "CSV, PDF reports, statements", { onNavigate("settings:data") }),
-            Triple("Help & support", "About FinCip", { onNavigate("settings:about") })
-        )
-        rows.forEachIndexed { i, (title, sub, act) ->
-            Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).clickable { tap(); act() }.padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text(title, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
-                    Text(sub, fontSize = 12.sp, color = scheme.onSurface.copy(alpha = .55f))
-                }
-                Text("›", fontSize = 22.sp, color = scheme.onSurface.copy(alpha = .4f))
-            }
-            if (i < rows.lastIndex) Box(Modifier.fillMaxWidth().height(1.dp).background(scheme.outlineVariant.copy(alpha = .5f)))
-        }
     }
 
     if (editing) {

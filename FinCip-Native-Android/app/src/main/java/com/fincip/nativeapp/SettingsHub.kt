@@ -31,6 +31,7 @@ import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.VisibilityOff
@@ -91,6 +92,7 @@ fun SettingsTab(
 ) {
     var page by remember { mutableStateOf(initialPage) }
     val tap = rememberTap()
+    val ctx = androidx.compose.ui.platform.LocalContext.current
     val settings = workspace.objectOrEmpty("settings")
     val titles = mapOf("theme" to "Theme & vibe", "currency" to "Currency", "dashboard" to "Home layout", "sound" to "Sound & touch", "privacy" to "Privacy defaults", "data" to "Reports & exports", "about" to "About FinCip")
     AnimatedContent(
@@ -115,7 +117,10 @@ fun SettingsTab(
                     SettingRow(Icons.Default.AutoAwesome, "Colours, icon & companion", onClick = onGoCustomize)
                     SettingRow(Icons.Default.CurrencyExchange, "Currency", settings.string("baseCurrency", "INR")) { page = "currency" }
                     SettingRow(Icons.Default.Dashboard, "Home layout") { page = "dashboard" }
-                    SettingRow(Icons.Default.VolumeUp, "Sound & touch", if (soundOn) "On" else "Off", last = true) { page = "sound" }
+                    SettingRow(Icons.Default.VolumeUp, "Sound & touch", if (soundOn) "On" else "Off") { page = "sound" }
+                    SettingRow(Icons.Default.Notifications, "Notifications", "Bill reminders", last = true) {
+                        runCatching { ctx.startActivity(android.content.Intent(android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, ctx.packageName).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)) }
+                    }
                 }
                 GroupLabel("Data")
                 NeoCard {
