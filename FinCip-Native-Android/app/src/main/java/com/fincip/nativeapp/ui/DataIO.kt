@@ -17,6 +17,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.snapshots.SnapshotStateMap
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -253,7 +254,7 @@ private fun ImportTab(
             text = {
                 Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     p.headers.forEachIndexed { i, h ->
-                        Selector(h.ifBlank { "Column ${i + 1}" }, roles[i].name.lowercase().replaceFirstChar { it.uppercase() }, Role.values().map { it.name.lowercase().replaceFirstChar { c -> c.uppercase() } }) { pick -> roles[i] = Role.values().first { it.name.equals(pick, true) } }
+                        Selector(h.ifBlank { "Column ${i + 1}" }, roles[i].name.lowercase().replaceFirstChar { it.uppercase() }, Role.values().map { it.name.lowercase().replaceFirstChar { c -> c.uppercase() } }, onSelect = { pick -> roles[i] = Role.values().first { it.name.equals(pick, true) } })
                     }
                 }
             },

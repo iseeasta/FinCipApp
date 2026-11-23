@@ -719,6 +719,7 @@ private fun FinCipApp(store: FinanceStore, securePrefs: SecurePrefs) {
 
     FinCipTheme(vibe, dark, accent) {
         val lightBars = MaterialTheme.colorScheme.background.luminance() > 0.5f
+        val bgArgb = MaterialTheme.colorScheme.background.toArgb()
         SideEffect {
             (context as? Activity)?.window?.let { w ->
                 val controller = androidx.core.view.WindowCompat.getInsetsController(w, w.decorView)
@@ -726,7 +727,7 @@ private fun FinCipApp(store: FinanceStore, securePrefs: SecurePrefs) {
                 controller.isAppearanceLightNavigationBars = lightBars
             }
             (context as? Activity)?.let { act ->
-                val bg = MaterialTheme.colorScheme.background.toArgb()
+                val bg = bgArgb
                 @Suppress("DEPRECATION") act.setTaskDescription(android.app.ActivityManager.TaskDescription("FinCip", null, bg))
             }
         }
