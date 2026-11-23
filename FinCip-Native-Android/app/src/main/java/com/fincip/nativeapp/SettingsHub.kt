@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.CurrencyExchange
 import androidx.compose.material.icons.filled.Dashboard
@@ -86,9 +87,9 @@ private fun SettingRow(icon: ImageVector, label: String, value: String = "", las
 @Composable
 fun SettingsTab(
     workspace: JsonObject, vibe: String, onVibe: (String) -> Unit, dark: Boolean, onDark: (Boolean) -> Unit, accent: String,
-    soundOn: Boolean, onGoProfile: () -> Unit, onGoSecurity: () -> Unit, content: @Composable (String) -> Unit
+    soundOn: Boolean, onGoProfile: () -> Unit, onGoSecurity: () -> Unit, onGoCustomize: () -> Unit = {}, initialPage: String? = null, content: @Composable (String) -> Unit
 ) {
-    var page by remember { mutableStateOf<String?>(null) }
+    var page by remember { mutableStateOf(initialPage) }
     val tap = rememberTap()
     val settings = workspace.objectOrEmpty("settings")
     val titles = mapOf("theme" to "Theme & vibe", "currency" to "Currency", "dashboard" to "Home layout", "sound" to "Sound & touch", "privacy" to "Privacy defaults", "data" to "Reports & exports", "about" to "About FinCip")
@@ -111,6 +112,7 @@ fun SettingsTab(
                 GroupLabel("Preferences")
                 NeoCard {
                     SettingRow(Icons.Default.Palette, "Theme & vibe", vibe) { page = "theme" }
+                    SettingRow(Icons.Default.AutoAwesome, "Colours, icon & companion", onClick = onGoCustomize)
                     SettingRow(Icons.Default.CurrencyExchange, "Currency", settings.string("baseCurrency", "INR")) { page = "currency" }
                     SettingRow(Icons.Default.Dashboard, "Home layout") { page = "dashboard" }
                     SettingRow(Icons.Default.VolumeUp, "Sound & touch", if (soundOn) "On" else "Off", last = true) { page = "sound" }

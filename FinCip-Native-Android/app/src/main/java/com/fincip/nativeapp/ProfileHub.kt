@@ -65,6 +65,11 @@ import com.fincip.nativeapp.ui.PopChip
 import com.fincip.nativeapp.ui.PopField
 import com.fincip.nativeapp.ui.ProfileAvatar
 import com.fincip.nativeapp.ui.rememberTap
+import androidx.compose.ui.draw.alpha
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.fillMaxSize
 import com.google.gson.JsonObject
 import com.fincip.nativeapp.ui.LockInput
 import com.fincip.nativeapp.ui.LockTypes
@@ -96,36 +101,28 @@ fun ProfileHub(
     appIcon: AppIconOption, onAppIcon: (AppIconOption) -> Unit,
     onBlockScreens: (Boolean) -> Unit,
     vibe: String, onVibe: (String) -> Unit, dark: Boolean, onDark: (Boolean) -> Unit, soundOn: Boolean,
+    onNavigate: (String) -> Unit = {}, settingsStart: String = "",
     settingsContent: @Composable (String) -> Unit,
     securityContent: @Composable () -> Unit
 ) {
-    var tab by remember(initialTab) { mutableIntStateOf(initialTab) }
-    var previous by remember { mutableIntStateOf(tab) }
-    val profile = workspace.objectOrEmpty("profile")
-    val tap = rememberTap()
-    Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 28.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-        HubHeader(workspace)
-        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            TabNames.forEachIndexed { i, name -> PopChip(name, tab == i, { previous = tab; tab = i }) }
-        }
-        AnimatedContent(
-            targetState = tab,
-            transitionSpec = {
-                val dir = if (targetState >= initialState) 1 else -1
-                (fadeIn(tween(220, delayMillis = 60)) + slideInHorizontally(tween(260)) { dir * it / 6 }) togetherWith (fadeOut(tween(120)) + slideOutHorizontally(tween(200)) { -dir * it / 8 })
-            }, label = "hubTab"
-        ) { current ->
-            CompositionLocalProvider(LocalEmbedded provides true) {
-                Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                    when (current) {
-                        0 -> ProfileEditor(profile, onProfileChange)
-                        1 -> SettingsTab(workspace, vibe, onVibe, dark, onDark, accent, soundOn, { previous = tab; tab = 0 }, { previous = tab; tab = 2 }, settingsContent)
-                        2 -> { LockCard(onBlockScreens); securityContent() }
-                        else -> CustomizationTab(workspace, onPetChange, accent, onAccent, appIcon, onAppIcon)
-                    }
-                }
+    Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 32.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        CompositionLocalProvider(LocalEmbedded provides true) {
+            when (initialTab) {
+                0 -> ProfilePage(workspace, onProfileChange, onNavigate)
+                1 -> SettingsTab(workspace, vibe, onVibe, dark, onDark, accent, soundOn, { onNavigate("profile") }, { onNavigate("security") }, { onNavigate("customize") }, settingsStart.ifBlank { null }, settingsContent)
+                2 -> { BackRow("Privacy & security") { onNavigate("settings") }; LockCard(onBlockScreens); securityContent() }
+                else -> { BackRow("Customization") { onNavigate("settings") }; CustomizationTab(workspace, onPetChange, accent, onAccent, appIcon, onAppIcon) }
             }
         }
+    }
+}
+
+@Composable
+private fun BackRow(title: String, onBack: () -> Unit) {
+    val tap = rememberTap()
+    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).clickable { tap(); onBack() }.padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text("‹", fontSize = 30.sp, modifier = Modifier.padding(end = 10.dp))
+        Text(title, fontWeight = FontWeight.Black, style = MaterialTheme.typography.titleLarge)
     }
 }
 
@@ -403,4 +400,282 @@ private fun CustomizationTab(
     }
     Text("Your companion", fontWeight = FontWeight.Black, style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(top = 4.dp))
     PetCustomizer(workspace, onPetChange)
+}
+
+
+// ───────────────────────────── Premium profile page ─────────────────────────────
+
+private data class Badge(val emoji: String, val title: String, val desc: String, val cur: Int, val target: Int) { val done get() = cur >= target }
+
+private fun longestStreak(days: Set<java.time.LocalDate>): Int {
+    var best = 0; var run = 0; var prev: java.time.LocalDate? = null
+    for (d in days.sorted()) { run = if (prev != null && prev.plusDays(1) == d) run + 1 else 1; best = maxOf(best, run); prev = d }
+    return best
+}
+
+private fun rankOf(level: Int) = when { level >= 15 -> "Mogul"; level >= 10 -> "Strategist"; level >= 6 -> "Planner"; level >= 3 -> "Saver"; else -> "Rookie" }
+
+/** Every badge is computed from the user's real data; nothing is stored or faked. */
+private fun badgesOf(ws: JsonObject, hasLock: Boolean): List<Badge> {
+    val txs = transactions(ws)
+    val days = txs.mapNotNull { runCatching { java.time.LocalDate.parse(it.string("date")) }.getOrNull() }.toSet()
+    val longest = longestStreak(days)
+    val goals = ws.arrayOrEmpty("goals").objects()
+    val reached = goals.count { it.string("type") != "debt" && it.double("target") > 0 && it.double("saved") >= it.double("target") }
+    val base = ws.objectOrEmpty("settings").string("baseCurrency", "INR")
+    val currencies = txs.map { it.string("currency", base).ifBlank { base } }.toSet().size
+    val inGreen = if (txs.isNotEmpty() && com.fincip.nativeapp.data.incomeTotal(ws) > com.fincip.nativeapp.data.expenseTotal(ws)) 1 else 0
+    val level = petProgress(ws).level
+    return listOf(
+        Badge("🌱", "First step", "Log your first entry", txs.size, 1),
+        Badge("✍️", "Getting regular", "Log 25 entries", txs.size, 25),
+        Badge("📒", "Ledger pro", "Log 100 entries", txs.size, 100),
+        Badge("🔥", "On a roll", "7 days in a row", longest, 7),
+        Badge("🗓️", "Habit formed", "30 days in a row", longest, 30),
+        Badge("🎯", "Planner", "Create a savings goal", goals.size, 1),
+        Badge("🏆", "Goal crusher", "Fully fund a goal", reached, 1),
+        Badge("💼", "Budget keeper", "Set a budget", ws.arrayOrEmpty("budgets").size(), 1),
+        Badge("🛡️", "Budget boss", "Set 3 budgets", ws.arrayOrEmpty("budgets").size(), 3),
+        Badge("🔔", "Bill tamer", "Track a recurring bill", ws.arrayOrEmpty("recurringRules").size(), 1),
+        Badge("💚", "In the green", "Earn more than you spend", inGreen, 1),
+        Badge("🌍", "Globetrotter", "Log in 2 currencies", currencies, 2),
+        Badge("📈", "Investor", "Add a finance product", ws.arrayOrEmpty("financeProducts").size(), 1),
+        Badge("🔒", "Locked in", "Turn on app lock", if (hasLock) 1 else 0, 1),
+        Badge("🐣", "Growing buddy", "Companion reaches level 5", level, 5),
+        Badge("⭐", "Star companion", "Companion reaches level 10", level, 10)
+    )
+}
+
+@Composable
+private fun PCard(modifier: Modifier = Modifier, content: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit) {
+    Column(modifier.fillMaxWidth().clip(RoundedCornerShape(26.dp)).background(MaterialTheme.colorScheme.surface).padding(18.dp), content = content)
+}
+
+@Composable
+private fun PHeader(title: String, trailing: String = "") {
+    Row(Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text(title.uppercase(), Modifier.weight(1f), style = MaterialTheme.typography.labelMedium, letterSpacing = 1.6.sp, fontWeight = FontWeight.Black, color = MaterialTheme.colorScheme.onBackground.copy(alpha = .55f))
+        if (trailing.isNotBlank()) Text(trailing, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+    }
+}
+
+@Composable
+private fun StatTileP(value: String, label: String, modifier: Modifier) {
+    val scheme = MaterialTheme.colorScheme
+    Column(modifier.clip(RoundedCornerShape(20.dp)).background(scheme.surfaceVariant.copy(alpha = .55f)).padding(16.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Text(value, fontWeight = FontWeight.Black, fontSize = 26.sp, letterSpacing = (-0.5).sp)
+        Text(label, fontSize = 12.sp, color = scheme.onSurface.copy(alpha = .62f), lineHeight = 15.sp)
+    }
+}
+
+@Composable
+private fun ProfilePage(workspace: JsonObject, onProfileChange: (JsonObject.() -> Unit) -> Unit, onNavigate: (String) -> Unit) {
+    val context = LocalContext.current
+    val scheme = MaterialTheme.colorScheme
+    val tap = rememberTap()
+    var editing by remember { mutableStateOf(false) }
+    val p = profileOf(workspace)
+    val raw = workspace.objectOrEmpty("profile")
+    val prog = petProgress(workspace)
+    val txs = transactions(workspace)
+    val badges = remember(workspace) { badgesOf(workspace, AppLock.hasPassword(context)) }
+    val unlocked = badges.filter { it.done }
+    val base = workspace.objectOrEmpty("settings").string("baseCurrency", "INR")
+    val joinedDate = runCatching { java.time.LocalDate.parse(raw.string("joined").take(10)) }.getOrNull()
+    val joinedShort = joinedDate?.format(java.time.format.DateTimeFormatter.ofPattern("MMM yyyy", java.util.Locale.ENGLISH))
+    val joinedLong = joinedDate?.format(java.time.format.DateTimeFormatter.ofPattern("d MMM yyyy", java.util.Locale.ENGLISH))
+
+    // ── Identity
+    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(30.dp)).background(scheme.surface)) {
+        Box(Modifier.fillMaxWidth()) {
+            val bannerImg = if (raw.string("bannerMode") == "photo") com.fincip.nativeapp.ui.rememberUserImage(context, true, raw.double("bannerStamp").toLong()) else null
+            if (bannerImg != null) androidx.compose.foundation.Image(bannerImg, null, Modifier.fillMaxWidth().height(132.dp), contentScale = androidx.compose.ui.layout.ContentScale.Crop)
+            else Box(Modifier.fillMaxWidth().height(132.dp).background(Brush.linearGradient(Banners[raw.double("banner").toInt().coerceIn(0, Banners.lastIndex)])))
+            Box(Modifier.align(Alignment.BottomStart).offset(x = 20.dp, y = 46.dp).background(scheme.surface, CircleShape).padding(5.dp)) { com.fincip.nativeapp.ui.UserAvatar(p, size = 92.dp) }
+        }
+        Spacer(Modifier.height(54.dp))
+        Column(Modifier.padding(horizontal = 20.dp, vertical = 4.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text(p.name, fontWeight = FontWeight.Black, fontSize = 27.sp, letterSpacing = (-0.6).sp, maxLines = 1)
+                    if (p.handle.isNotBlank()) Text("@" + p.handle, color = scheme.onSurface.copy(alpha = .55f))
+                }
+                Text("Edit", Modifier.clip(RoundedCornerShape(50)).background(scheme.primary).clickable { tap(); editing = true }.padding(horizontal = 18.dp, vertical = 9.dp), color = scheme.onPrimary, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+            }
+            Spacer(Modifier.height(10.dp))
+            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                listOf(p.tagline, raw.string("city"), joinedShort?.let { "Member since $it" } ?: "").filter { it.isNotBlank() }.forEach {
+                    Text(it, Modifier.clip(RoundedCornerShape(50)).background(scheme.surfaceVariant.copy(alpha = .7f)).padding(horizontal = 12.dp, vertical = 6.dp), fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                }
+            }
+            if (raw.string("bio").isNotBlank()) Text(raw.string("bio"), Modifier.padding(top = 10.dp), style = MaterialTheme.typography.bodyMedium, color = scheme.onSurface.copy(alpha = .75f))
+            if (joinedLong != null) Text("Account created $joinedLong", Modifier.padding(top = 8.dp), style = MaterialTheme.typography.labelSmall, color = scheme.onSurface.copy(alpha = .45f))
+        }
+        Spacer(Modifier.height(18.dp))
+    }
+
+    // ── FinCip identity card
+    val cardA = scheme.primary
+    val cardB = androidx.compose.ui.graphics.lerp(scheme.primary, scheme.tertiary, .6f)
+    val cardC = androidx.compose.ui.graphics.lerp(scheme.primary, Color.Black, .45f)
+    val fg = scheme.onPrimary
+    Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(30.dp)).background(Brush.linearGradient(listOf(cardA, cardB, cardC)))) {
+        Box(Modifier.align(Alignment.TopEnd).offset(x = 50.dp, y = (-60).dp).size(200.dp).background(Color.White.copy(alpha = .10f), CircleShape))
+        Box(Modifier.align(Alignment.BottomStart).offset(x = (-40).dp, y = 60.dp).size(150.dp).background(Color.White.copy(alpha = .07f), CircleShape))
+        Column(Modifier.padding(22.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("FINCIP IDENTITY", Modifier.weight(1f), fontSize = 11.sp, letterSpacing = 2.sp, fontWeight = FontWeight.Black, color = fg.copy(alpha = .8f))
+                Text(rankOf(prog.level).uppercase(), Modifier.clip(RoundedCornerShape(50)).background(fg.copy(alpha = .2f)).padding(horizontal = 12.dp, vertical = 5.dp), fontSize = 11.sp, letterSpacing = 1.5.sp, fontWeight = FontWeight.Black, color = fg)
+            }
+            Row(verticalAlignment = Alignment.Bottom) {
+                Text("LV", Modifier.padding(bottom = 10.dp, end = 6.dp), fontWeight = FontWeight.Black, color = fg.copy(alpha = .75f))
+                Text(prog.level.toString(), fontSize = 60.sp, fontWeight = FontWeight.Black, color = fg, letterSpacing = (-2).sp, lineHeight = 60.sp)
+            }
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Box(Modifier.fillMaxWidth().height(8.dp).clip(CircleShape).background(fg.copy(alpha = .22f))) {
+                    Box(Modifier.fillMaxWidth((prog.xpInLevel / 100f).coerceIn(0.02f, 1f)).height(8.dp).clip(CircleShape).background(fg))
+                }
+                Text("${prog.xpInLevel} / 100 XP to level ${prog.level + 1} · ${prog.xp} XP total", fontSize = 12.sp, color = fg.copy(alpha = .85f))
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text(p.name, fontWeight = FontWeight.Bold, color = fg, maxLines = 1)
+                    Text("${unlocked.size} of ${badges.size} badges", fontSize = 12.sp, color = fg.copy(alpha = .75f))
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy((-8).dp)) {
+                    unlocked.take(4).forEach { b -> Box(Modifier.size(34.dp).background(fg.copy(alpha = .22f), CircleShape).border(2.dp, cardC, CircleShape), contentAlignment = Alignment.Center) { Text(b.emoji, fontSize = 16.sp) } }
+                }
+            }
+        }
+    }
+
+    // ── Achievements
+    PHeader("Achievements", "${unlocked.size} / ${badges.size}")
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        badges.chunked(2).forEach { row ->
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                row.forEach { b ->
+                    Column(
+                        Modifier.weight(1f).clip(RoundedCornerShape(22.dp)).background(if (b.done) scheme.primary.copy(alpha = .15f) else scheme.surface).padding(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Box(Modifier.size(44.dp).background(if (b.done) scheme.primary.copy(alpha = .28f) else scheme.onSurface.copy(alpha = .07f), CircleShape), contentAlignment = Alignment.Center) {
+                            Text(b.emoji, fontSize = 22.sp, modifier = Modifier.then(if (b.done) Modifier else Modifier.alpha(.35f)))
+                        }
+                        Text(b.title, fontWeight = FontWeight.Bold, fontSize = 14.sp, maxLines = 1)
+                        Text(b.desc, fontSize = 11.sp, color = scheme.onSurface.copy(alpha = .6f), lineHeight = 14.sp, maxLines = 2)
+                        if (b.done) Text("Unlocked", fontSize = 11.sp, fontWeight = FontWeight.Black, color = scheme.primary)
+                        else {
+                            Box(Modifier.fillMaxWidth().height(5.dp).clip(CircleShape).background(scheme.onSurface.copy(alpha = .1f))) {
+                                Box(Modifier.fillMaxWidth((b.cur.toFloat() / b.target).coerceIn(0.02f, 1f)).height(5.dp).clip(CircleShape).background(scheme.primary.copy(alpha = .7f)))
+                            }
+                            Text("${b.cur} / ${b.target}", fontSize = 11.sp, color = scheme.onSurface.copy(alpha = .55f))
+                        }
+                    }
+                }
+                if (row.size == 1) Spacer(Modifier.weight(1f))
+            }
+        }
+    }
+
+    // ── Financial journey
+    PHeader("Financial journey")
+    val ym = java.time.YearMonth.now()
+    val budgets = workspace.arrayOrEmpty("budgets").objects()
+    val spendNow = com.fincip.nativeapp.data.monthlyTransactions(workspace, ym.toString()).filter { it.string("type") != "income" }
+    val onTrack = budgets.count { b ->
+        val spent = spendNow.filter { it.string("category").equals(b.string("category"), true) }.sumOf { com.fincip.nativeapp.data.toBase(workspace, it.double("amount"), it.string("currency", "INR")) }
+        spent <= com.fincip.nativeapp.data.toBase(workspace, b.double("limit"), b.string("currency", base))
+    }
+    val goals = workspace.arrayOrEmpty("goals").objects().filter { it.string("type") != "debt" }
+    val reachedGoals = goals.count { it.double("target") > 0 && it.double("saved") >= it.double("target") }
+    val streak = entryStreak(workspace)
+    val best = longestStreak(txs.mapNotNull { runCatching { java.time.LocalDate.parse(it.string("date")) }.getOrNull() }.toSet())
+    PCard {
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            StatTileP(txs.size.toString(), "Transactions recorded", Modifier.weight(1f))
+            StatTileP(if (budgets.isEmpty()) "—" else "$onTrack/${budgets.size}", "Budgets on track this month", Modifier.weight(1f))
+        }
+        Spacer(Modifier.height(10.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            StatTileP(if (goals.isEmpty()) "—" else "$reachedGoals/${goals.size}", "Savings goals reached", Modifier.weight(1f))
+            StatTileP("${streak}d", "Current streak · best ${best}d", Modifier.weight(1f))
+        }
+        Spacer(Modifier.height(16.dp))
+        Text("Entries per month", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+        Spacer(Modifier.height(10.dp))
+        val months = (5 downTo 0).map { ym.minusMonths(it.toLong()) }
+        val counts = months.map { com.fincip.nativeapp.data.monthlyTransactions(workspace, it.toString()).size }
+        val peak = (counts.maxOrNull() ?: 0).coerceAtLeast(1)
+        if (counts.all { it == 0 }) Text("Nothing logged in the last six months yet.", style = MaterialTheme.typography.bodySmall, color = scheme.onSurface.copy(alpha = .6f))
+        else Row(Modifier.fillMaxWidth().height(84.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Bottom) {
+            months.forEachIndexed { i, m ->
+                Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Bottom) {
+                    Text(counts[i].toString(), fontSize = 10.sp, color = scheme.onSurface.copy(alpha = .6f))
+                    Box(Modifier.fillMaxWidth().height((52.dp * counts[i] / peak).coerceAtLeast(4.dp)).clip(RoundedCornerShape(8.dp)).background(if (i == 5) scheme.primary else scheme.primary.copy(alpha = .35f)))
+                    Text(m.month.getDisplayName(java.time.format.TextStyle.NARROW, java.util.Locale.ENGLISH), fontSize = 10.sp, color = scheme.onSurface.copy(alpha = .55f))
+                }
+            }
+        }
+    }
+
+    // ── Companion
+    PHeader("Your companion")
+    val pet = workspace.objectOrEmpty("mascot")
+    val unlockedAcc = PetOptions.accessories.filter { it.second <= prog.level && it.first != "None" }
+    val nextAcc = PetOptions.accessories.filter { it.second > prog.level }.minByOrNull { it.second }
+    PCard {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+            com.fincip.nativeapp.ui.PetCharacter(petLookOf(pet), com.fincip.nativeapp.ui.PetMood.HAPPY, prog.level, Modifier.clip(RoundedCornerShape(26.dp)), diameter = 112.dp)
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(pet.string("name", "Mochi"), fontWeight = FontWeight.Black, fontSize = 22.sp)
+                Text("Level ${prog.level} · ${com.fincip.nativeapp.ui.PetStageNames[com.fincip.nativeapp.ui.petStage(prog.level)]}", fontSize = 13.sp, color = scheme.onSurface.copy(alpha = .65f))
+                Text("Customize ›", Modifier.padding(top = 4.dp).clip(RoundedCornerShape(50)).background(scheme.primary.copy(alpha = .15f)).clickable { tap(); onNavigate("customize") }.padding(horizontal = 14.dp, vertical = 7.dp), color = scheme.primary, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+            }
+        }
+        Spacer(Modifier.height(14.dp))
+        Text("Unlocked accessories · ${unlockedAcc.size}/${PetOptions.accessories.size - 1}", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+        Spacer(Modifier.height(8.dp))
+        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            unlockedAcc.forEach { Text(it.first, Modifier.clip(RoundedCornerShape(50)).background(scheme.surfaceVariant.copy(alpha = .7f)).padding(horizontal = 12.dp, vertical = 6.dp), fontSize = 12.sp) }
+        }
+        if (nextAcc != null) Text("Next unlock: ${nextAcc.first} at level ${nextAcc.second}", Modifier.padding(top = 8.dp), fontSize = 12.sp, color = scheme.onSurface.copy(alpha = .55f))
+    }
+
+    // ── Account & preferences
+    PHeader("Account & preferences")
+    PCard {
+        val rows = listOf(
+            Triple("Personal information", "Name, username, photo, banner", { editing = true }),
+            Triple("Security & privacy", "App lock, biometrics, hide in recents", { onNavigate("security") }),
+            Triple("Notifications", "Bill reminder permissions", {
+                runCatching { context.startActivity(android.content.Intent(android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, context.packageName).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)) }
+                Unit
+            }),
+            Triple("Colours, icon & companion", "Make FinCip look like you", { onNavigate("customize") }),
+            Triple("Backup & restore", "Encrypted backups of your data", { onNavigate("security") }),
+            Triple("Import & export", "CSV, PDF reports, statements", { onNavigate("settings:data") }),
+            Triple("Help & support", "About FinCip", { onNavigate("settings:about") })
+        )
+        rows.forEachIndexed { i, (title, sub, act) ->
+            Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).clickable { tap(); act() }.padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text(title, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+                    Text(sub, fontSize = 12.sp, color = scheme.onSurface.copy(alpha = .55f))
+                }
+                Text("›", fontSize = 22.sp, color = scheme.onSurface.copy(alpha = .4f))
+            }
+            if (i < rows.lastIndex) Box(Modifier.fillMaxWidth().height(1.dp).background(scheme.outlineVariant.copy(alpha = .5f)))
+        }
+    }
+
+    if (editing) {
+        androidx.compose.ui.window.Dialog(onDismissRequest = { editing = false }, properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)) {
+            Column(Modifier.fillMaxSize().background(scheme.background).statusBarsPadding().navigationBarsPadding().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                Text("Edit profile", fontWeight = FontWeight.Black, fontSize = 24.sp)
+                ProfileEditor(raw, onProfileChange)
+                NeoButton("Done", Modifier.fillMaxWidth(), onClick = { editing = false })
+            }
+        }
+    }
 }

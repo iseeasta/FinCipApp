@@ -222,7 +222,7 @@ private fun budgetUsed(workspace: JsonObject, month: String, b: JsonObject): Dou
 
 
 /** Consecutive days (ending today, or yesterday if nothing logged yet today) with at least one entry. */
-private fun entryStreak(workspace: JsonObject): Int {
+fun entryStreak(workspace: JsonObject): Int {
     val days = transactions(workspace).mapNotNull { runCatching { LocalDate.parse(it.string("date")) }.getOrNull() }.toSet()
     var d = LocalDate.now()
     if (d !in days) d = d.minusDays(1)
@@ -402,7 +402,7 @@ fun CalendarScreen(workspace: JsonObject, month: String, onMonthChange: (String)
     val days = monthDate.lengthOfMonth()
     val allCells = List(firstOffset) { 0 } + (1..days).toList()
     val weeks = allCells.chunked(7)
-    if (picker) MonthYearPicker(monthDate, { onMonthChange(it.toString()); picker = false }, { picker = false })
+    if (picker) com.fincip.nativeapp.ui.MonthPickerDialog(monthDate, transactions(workspace).map { it.string("date").take(7) }.toSet(), { onMonthChange(it.toString()); picker = false }, { picker = false })
     PageColumn {
         PageHeading("MONEY ON THE MOVE", "Your month, in color.", "Green marks income, red marks spending, gold marks bills and blue marks savings milestones.")
         NeoCard {

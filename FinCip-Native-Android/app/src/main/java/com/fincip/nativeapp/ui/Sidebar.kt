@@ -139,7 +139,9 @@ fun FinCipSidebar(
     onSelect: (NavPage) -> Unit,
     onVoice: () -> Unit,
     onTheme: () -> Unit,
-    modifier: Modifier = Modifier
+    onSettings: () -> Unit,
+    modifier: Modifier = Modifier,
+    width: androidx.compose.ui.unit.Dp = SidebarWidth
 ) {
     val scheme = MaterialTheme.colorScheme
     val selectedGroup = pages.firstOrNull { it.id == selectedPage }?.group ?: "Home"
@@ -150,29 +152,17 @@ fun FinCipSidebar(
     val settingsPages = pages.filter { it.id in SettingIds }
 
     Surface(
-        modifier.width(SidebarWidth).fillMaxHeight(),
+        modifier.width(width).fillMaxHeight(),
         shape = RoundedCornerShape(topEnd = 28.dp, bottomEnd = 28.dp),
-        color = scheme.surface, shadowElevation = 14.dp,
-        border = BorderStroke(1.dp, scheme.outlineVariant)
+        color = scheme.surface.copy(alpha = .55f), shadowElevation = 0.dp,
+        border = BorderStroke(1.dp, androidx.compose.ui.graphics.Brush.verticalGradient(listOf(Color.White.copy(alpha = .55f), scheme.primary.copy(alpha = .3f), Color.White.copy(alpha = .15f))))
     ) {
-        Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().padding(horizontal = 14.dp, vertical = 12.dp)) {
+        Column(Modifier.fillMaxSize().background(androidx.compose.ui.graphics.Brush.verticalGradient(listOf(scheme.primary.copy(alpha = .22f), Color.Transparent, scheme.tertiary.copy(alpha = .18f)))).statusBarsPadding().navigationBarsPadding().padding(horizontal = 14.dp, vertical = 12.dp)) {
             // Logo row: same place as the page-header logo, so tapping it feels like one control.
             Row(Modifier.fillMaxWidth().height(48.dp), verticalAlignment = Alignment.CenterVertically) {
                 FinCipMark(Modifier.clip(RoundedCornerShape(10.dp)).clickable(onClickLabel = "Hide sidebar", onClick = onToggle), size = 40.dp)
                 Spacer(Modifier.width(10.dp))
                 Text("FinCip", fontWeight = FontWeight.Black, fontSize = 22.sp, letterSpacing = (-0.6).sp, color = scheme.onSurface)
-            }
-            Spacer(Modifier.height(10.dp))
-            Row(
-                Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).clickable(onClickLabel = "Open profile", onClick = onProfile).padding(vertical = 6.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                UserAvatar(profile, size = 46.dp)
-                Spacer(Modifier.width(12.dp))
-                Column(Modifier.weight(1f)) {
-                    Text((profile.tagline.ifBlank { "FinCip member" }).uppercase(), style = MaterialTheme.typography.labelSmall, letterSpacing = 1.2.sp, color = scheme.onSurface.copy(alpha = .55f), maxLines = 1)
-                    Text(profile.name, fontWeight = FontWeight.Bold, fontSize = 17.sp, color = scheme.onSurface, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                }
             }
             Spacer(Modifier.height(8.dp))
             Box(Modifier.fillMaxWidth().height(1.dp).background(scheme.outlineVariant))
@@ -200,9 +190,21 @@ fun FinCipSidebar(
                 }
             }
             Box(Modifier.fillMaxWidth().height(1.dp).background(scheme.outlineVariant))
-            Row(Modifier.fillMaxWidth().padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                QuickAction(Icons.Default.Mic, "Voice entry", Modifier.weight(1f), onVoice)
-                QuickAction(if (dark) Icons.Default.LightMode else Icons.Default.DarkMode, if (dark) "Light mode" else "Dark mode", Modifier.weight(1f), onTheme)
+            Row(
+                Modifier.fillMaxWidth().padding(top = 10.dp).clip(RoundedCornerShape(20.dp)).background(scheme.onSurface.copy(alpha = .07f)).padding(6.dp),
+                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Row(Modifier.weight(1f).clip(RoundedCornerShape(16.dp)).clickable(onClickLabel = "Open profile", onClick = onProfile).padding(2.dp), verticalAlignment = Alignment.CenterVertically) {
+                    UserAvatar(profile, size = 38.dp)
+                    Spacer(Modifier.width(8.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(profile.name, fontWeight = FontWeight.Bold, fontSize = 14.sp, color = scheme.onSurface, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(profile.tagline.ifBlank { "FinCip member" }, fontSize = 11.sp, color = scheme.onSurface.copy(alpha = .6f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
+                }
+                IconTile(Icons.Default.Mic, "Voice entry", onVoice)
+                IconTile(if (dark) Icons.Default.LightMode else Icons.Default.DarkMode, if (dark) "Light mode" else "Dark mode", onTheme)
+                IconTile(Icons.Default.Settings, "Settings", onSettings)
             }
         }
     }
@@ -256,5 +258,15 @@ private fun QuickAction(icon: ImageVector, label: String, modifier: Modifier, on
     ) {
         Icon(icon, contentDescription = null, tint = scheme.onSurface, modifier = Modifier.size(18.dp))
         Text(label, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = scheme.onSurface, maxLines = 1, overflow = TextOverflow.Ellipsis)
+    }
+}
+
+
+@Composable
+private fun IconTile(icon: ImageVector, label: String, onClick: () -> Unit) {
+    val scheme = MaterialTheme.colorScheme
+    val tap = rememberTap()
+    Box(Modifier.size(36.dp).clip(RoundedCornerShape(12.dp)).clickable(role = Role.Button, onClickLabel = label, onClick = { tap(); onClick() }), contentAlignment = Alignment.Center) {
+        Icon(icon, contentDescription = label, tint = scheme.onSurface.copy(alpha = .85f), modifier = Modifier.size(20.dp))
     }
 }

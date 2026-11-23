@@ -727,14 +727,19 @@ private fun FinCipApp(store: FinanceStore, securePrefs: SecurePrefs) {
             val balance = incomeTotal(workspace) - expenseTotal(workspace)
             val savingsRate = if (monthIncome > 0) (monthIncome - monthExpenses) / monthIncome * 100 else 0.0
             val wide = LocalConfiguration.current.screenWidthDp >= 600
-            val pushW by animateDpAsState(if (wide && sidebarExpanded) SidebarWidth else 0.dp, tween(260, easing = FastOutSlowInEasing), label = "pushW")
-            val sidebarX by animateDpAsState(if (sidebarExpanded) 0.dp else -SidebarWidth - 24.dp, tween(260, easing = FastOutSlowInEasing), label = "sidebarX")
+            val sbW = if (wide) SidebarWidth else minOf(SidebarWidth, (LocalConfiguration.current.screenWidthDp * 0.78f).dp)
+            val pushW by animateDpAsState(if (sidebarExpanded) sbW else 0.dp, tween(300, easing = FastOutSlowInEasing), label = "pushW")
+            val sidebarX by animateDpAsState(if (sidebarExpanded) 0.dp else -sbW - 24.dp, tween(300, easing = FastOutSlowInEasing), label = "sidebarX")
+            val corner by animateDpAsState(if (sidebarExpanded && !wide) 28.dp else 0.dp, tween(300), label = "corner")
+            val isPersonal = page.substringBefore(":") in setOf("profile", "settings", "security", "customize")
             fun toggleSidebar() { sidebarExpanded = !sidebarExpanded; if (wide) context.getSharedPreferences("fincip_ui", 0).edit().putBoolean("sidebar_expanded", sidebarExpanded).apply() }
             androidx.activity.compose.BackHandler(enabled = !wide && sidebarExpanded) { sidebarExpanded = false }
-            Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+            val glowA = MaterialTheme.colorScheme.primary
+            val glowB = MaterialTheme.colorScheme.tertiary
+            Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).background(androidx.compose.ui.graphics.Brush.radialGradient(listOf(glowA.copy(alpha = .38f), Color.Transparent), center = androidx.compose.ui.geometry.Offset(120f, 300f), radius = 900f)).background(androidx.compose.ui.graphics.Brush.radialGradient(listOf(glowB.copy(alpha = .30f), Color.Transparent), center = androidx.compose.ui.geometry.Offset(200f, 2200f), radius = 1000f))) {
               Row(Modifier.fillMaxSize()) {
-                Spacer(Modifier.width(pushW))
-                Box(Modifier.weight(1f)) {
+                Spacer(Modifier.width(if (wide) pushW else 0.dp))
+                Box(Modifier.weight(1f).then(if (!wide) Modifier.offset(x = pushW).clip(RoundedCornerShape(topStart = corner, bottomStart = corner)) else Modifier)) {
             Scaffold(
                 containerColor = MaterialTheme.colorScheme.background,
                 contentWindowInsets = WindowInsets(0, 0, 0, 0),
@@ -746,20 +751,20 @@ private fun FinCipApp(store: FinanceStore, securePrefs: SecurePrefs) {
                     ) {
                         FinCipMark(Modifier.clip(RoundedCornerShape(10.dp)).clickable(onClickLabel = "Show sidebar") { toggleSidebar() }, size = 38.dp)
                         Column(Modifier.weight(1f).padding(start = 4.dp)) {
-                            Text(if (page in setOf("profile", "settings", "security", "customize")) "Profile" else (NAV_PAGES.firstOrNull { it.id == page }?.title ?: "FinCip"), fontWeight = FontWeight.Black, fontSize = 22.sp, letterSpacing = (-0.5).sp, maxLines = 1)
+                            Text(when (page.substringBefore(":")) { "profile" -> "Profile"; "settings" -> "Settings"; "security" -> "Privacy & security"; "customize" -> "Customization"; else -> null } ?: (NAV_PAGES.firstOrNull { it.id == page }?.title ?: "FinCip"), fontWeight = FontWeight.Black, fontSize = 22.sp, letterSpacing = (-0.5).sp, maxLines = 1)
                             Text(LocalDate.now().format(DateTimeFormatter.ofPattern("EEE, d MMM", Locale.ENGLISH)).uppercase(), style = MaterialTheme.typography.labelSmall, letterSpacing = 1.2.sp, color = MaterialTheme.colorScheme.onBackground.copy(alpha = .6f), maxLines = 1)
                         }
                         IconButton(modifier = Modifier.size(42.dp).background(MaterialTheme.colorScheme.surface, CircleShape), onClick = { updateWorkspace { root -> val settings = root.objectOrEmpty("settings"); settings.addProperty("privacyMode", !settings.bool("privacyMode")); root.add("settings", settings) } }) { Icon(if (privacy) Icons.Default.VisibilityOff else Icons.Default.Visibility, contentDescription = "Toggle privacy", modifier = Modifier.size(20.dp)) }
                     }
-                    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                        MonthMenu(month) { month = it }
+                    if (!isPersonal) Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        MonthMenu(month, transactions(workspace).map { it.string("date").take(7) }.toSet()) { month = it }
                     }
                   }
                 }
             ) { innerPadding ->
                 Column(Modifier.fillMaxSize().padding(innerPadding).navigationBarsPadding()) {
                     AnimatedContent(targetState = page, transitionSpec = { (fadeIn(tween(240, delayMillis = 70)) + slideInVertically(tween(280)) { it / 18 }) togetherWith fadeOut(tween(120)) }, label = "page") { currentPage ->
-                    when (currentPage) {
+                    when (currentPage.substringBefore(":")) {
                         "overview" -> OverviewScreen(workspace, month, privacy, savingsRate, balance, onAdd = { openForm("transaction") }, onMascot = { page = "customize" }, onOpen = { id -> NAV_PAGES.firstOrNull { it.id == id }?.let { group = it.group; page = it.id } }, onNewGoal = { openForm("goal") }, onEditTx = { openForm("transaction", it) }, onWidgets = { ids -> updateWorkspace { root -> val st = root.objectOrEmpty("settings"); st.add("homeWidgets", com.google.gson.JsonArray().also { a -> ids.forEach { a.add(it) } }); root.add("settings", st) } })
                         "transactions" -> TransactionsScreen(workspace, month, privacy, transactionQuery, { transactionQuery = it }, { openForm("transaction") }, { openForm("transaction", it) }, { deleteFromArray("transactions", it.string("id")) }, { statementLauncher.launch(arrayOf("text/*", "application/octet-stream")) }, { exportCsvLauncher.launch("FinCip-transactions.csv") })
                         "recurring" -> RecurringScreen(workspace, privacy, { openForm("bill") }, { deleteFromArray("recurringRules", it.string("id")) }, { markRecurringPaid(it) })
@@ -878,7 +883,8 @@ private fun FinCipApp(store: FinanceStore, securePrefs: SecurePrefs) {
                             }, onSignOut = { securePrefs.clearSession(); session = securePrefs.readSupabase(); notify("Signed out") }
                         )
 "profile", "settings", "security", "customize" -> ProfileHub(
-                            workspace, initialTab = when (currentPage) { "settings" -> 1; "security" -> 2; "customize" -> 3; else -> 0 },
+                            workspace, initialTab = when (currentPage.substringBefore(":")) { "settings" -> 1; "security" -> 2; "customize" -> 3; else -> 0 },
+                            onNavigate = { target -> page = target }, settingsStart = currentPage.substringAfter(":", ""),
                             onProfileChange = { block -> updateProfile(block) }, onPetChange = { block -> updateMascot(block) },
                             accent = accent, onAccent = { accent = it; context.getSharedPreferences("fincip_ui", 0).edit().putString("accent_v2", it).apply() },
                             appIcon = appIcon, onAppIcon = { appIcon = it; AppIcons.apply(context, it) },
@@ -912,15 +918,15 @@ private fun FinCipApp(store: FinanceStore, securePrefs: SecurePrefs) {
                     }
                 }
             }
+                if (!wide && sidebarExpanded) Box(Modifier.fillMaxSize().clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { sidebarExpanded = false })
                 }
-              }
-              AnimatedVisibility(visible = !wide && sidebarExpanded, enter = fadeIn(tween(200)), exit = fadeOut(tween(200))) {
-                  Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = .5f)).clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { sidebarExpanded = false })
               }
               FinCipSidebar(
                   pages = NAV_PAGES, selectedPage = page, profile = profileOf(workspace), dark = dark,
                   onToggle = { toggleSidebar() },
                   onProfile = { page = "profile"; if (!wide) sidebarExpanded = false },
+                  onSettings = { page = "settings"; if (!wide) sidebarExpanded = false },
+                  width = sbW,
                   onSelect = { target -> group = target.group; page = target.id; if (!wide) sidebarExpanded = false },
                   onVoice = { if (!wide) sidebarExpanded = false; startVoice() },
                   onTheme = { dark = !dark; context.getSharedPreferences("fincip_ui", 0).edit().putBoolean("dark", dark).apply() },
@@ -1037,19 +1043,14 @@ private fun transactionFingerprint(t: JsonObject): String = listOf(
 ).joinToString("|")
 
 @Composable
-private fun MonthMenu(month: String, onSelect: (String) -> Unit) {
-    var expanded by remember { mutableStateOf(false) }
+private fun MonthMenu(month: String, activeMonths: Set<String>, onSelect: (String) -> Unit) {
+    var open by remember { mutableStateOf(false) }
     val selected = runCatching { YearMonth.parse(month) }.getOrElse { YearMonth.now() }
-    Box {
-        OutlinedButton(onClick = { expanded = true }, shape = RoundedCornerShape(50), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline), colors = androidx.compose.material3.ButtonDefaults.outlinedButtonColors(containerColor = Pop.Sun, contentColor = Pop.Ink), contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 14.dp, vertical = 6.dp)) {
-            Icon(Icons.Default.CalendarMonth, contentDescription = null, modifier = Modifier.size(17.dp)); Spacer(Modifier.width(7.dp))
-            Text(selected.format(DateTimeFormatter.ofPattern("MMM yyyy", Locale.ENGLISH)), fontWeight = FontWeight.Bold)
-        }
-        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-            val months = (0..23).map { selected.minusMonths(it.toLong()) }
-            months.forEach { item -> DropdownMenuItem(text = { Text(item.format(DateTimeFormatter.ofPattern("MMMM yyyy", Locale.ENGLISH))) }, onClick = { onSelect(item.toString()); expanded = false }) }
-        }
+    OutlinedButton(onClick = { open = true }, shape = RoundedCornerShape(50), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline), colors = androidx.compose.material3.ButtonDefaults.outlinedButtonColors(containerColor = MaterialTheme.colorScheme.primaryContainer, contentColor = MaterialTheme.colorScheme.onPrimaryContainer)) {
+        Icon(Icons.Default.CalendarMonth, contentDescription = null, modifier = Modifier.size(17.dp)); Spacer(Modifier.width(7.dp))
+        Text(selected.format(DateTimeFormatter.ofPattern("MMM yyyy", Locale.ENGLISH)), fontWeight = FontWeight.Bold)
     }
+    if (open) com.fincip.nativeapp.ui.MonthPickerDialog(selected, activeMonths, { onSelect(it.toString()); open = false }, { open = false })
 }
 
 @Composable
