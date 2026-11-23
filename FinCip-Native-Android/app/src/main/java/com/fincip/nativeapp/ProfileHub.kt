@@ -265,6 +265,7 @@ private fun LockCard(onBlockScreens: (Boolean) -> Unit) {
     var bio by remember { mutableStateOf(AppLock.biometricEnabled(context)) }
     var timeout by remember { mutableIntStateOf(AppLock.timeoutSeconds(context)) }
     var secure by remember { mutableStateOf(AppLock.blockScreenshots(context)) }
+    var captures by remember { mutableStateOf(AppLock.blockCaptures(context)) }
     var mode by remember { mutableStateOf("") } // "", "setup", "verify-change", "verify-remove"
     var type by remember { mutableStateOf("password") }
     var first by remember { mutableStateOf<String?>(null) }
@@ -344,7 +345,10 @@ private fun LockCard(onBlockScreens: (Boolean) -> Unit) {
         }
     }
     NeoCard {
-        SwitchRow("Blur in recent apps", "Shows a blurred cover instead of your numbers in the app switcher.", secure) { secure = it; AppLock.setBlockScreenshots(context, it); onBlockScreens(it) }
+        var noShots by remember { mutableStateOf(AppLock.noScreenshots(context)) }
+        SwitchRow("Blur in recent apps", "Shows a blurred cover instead of your numbers in the app switcher.", secure) { secure = it; AppLock.setBlockScreenshots(context, it) }
+        Spacer(Modifier.height(10.dp))
+        SwitchRow("Block screenshots", "Stops screenshots and screen recording inside FinCip. Android also shows a plain black card in recent apps while this is on.", noShots) { noShots = it; AppLock.setNoScreenshots(context, it); onBlockScreens(it) }
     }
 }
 

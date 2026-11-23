@@ -28,8 +28,16 @@ object AppLock {
     /** Seconds the app may stay in the background before it locks again (0 = immediately). */
     fun timeoutSeconds(c: Context) = prefs(c).getInt("timeout", 30)
     fun setTimeoutSeconds(c: Context, s: Int) = prefs(c).edit().putInt("timeout", s).apply()
+    /** Blur the app in the recent-apps switcher. */
+    /** "Blur in recent apps": covers the window with a blur when the user leaves the app. */
     fun blockScreenshots(c: Context) = prefs(c).getBoolean("secure", false)
     fun setBlockScreenshots(c: Context, on: Boolean) = prefs(c).edit().putBoolean("secure", on).apply()
+    /** "Block screenshots": FLAG_SECURE. Also makes the app-switcher preview solid black (Android's rule). */
+    fun blockCaptures(c: Context) = prefs(c).getBoolean("captures", false)
+    fun setBlockCaptures(c: Context, on: Boolean) = prefs(c).edit().putBoolean("captures", on).apply()
+    /** Block screenshots and screen recording (FLAG_SECURE). */
+    fun noScreenshots(c: Context) = prefs(c).getBoolean("noshots", false)
+    fun setNoScreenshots(c: Context, on: Boolean) = prefs(c).edit().putBoolean("noshots", on).apply()
 
     private fun hash(password: String, salt: ByteArray): ByteArray =
         SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256").generateSecret(PBEKeySpec(password.toCharArray(), salt, 60_000, 256)).encoded

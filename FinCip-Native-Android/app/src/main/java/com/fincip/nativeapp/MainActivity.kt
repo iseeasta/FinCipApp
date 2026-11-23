@@ -185,23 +185,35 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE)
+        if (AppLock.noScreenshots(this)) window.addFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE)
         scheduleReminders()
         setContent { FinCipApp(FinanceStore(applicationContext), SecurePrefs(applicationContext)) }
     }
 
-    override fun onPause() {
-        super.onPause()
-        // Recents preview: blur the whole window when the user turned on "Blur in recent apps".
-        if (android.os.Build.VERSION.SDK_INT >= 31 && AppLock.blockScreenshots(this)) {
-            window.decorView.setRenderEffect(android.graphics.RenderEffect.createBlurEffect(60f, 60f, android.graphics.Shader.TileMode.CLAMP))
+    private fun blurNow() {
+        if (!AppLock.blockScreenshots(this)) return
+        PrivacyShield.covered = true
+        if (android.os.Build.VERSION.SDK_INT >= 31) {
+            window.decorView.setRenderEffect(android.graphics.RenderEffect.createBlurEffect(70f, 70f, android.graphics.Shader.TileMode.CLAMP))
+            window.decorView.invalidate()
         }
     }
 
-    override fun onResume() {
-        super.onResume()
-        if (android.os.Build.VERSION.SDK_INT >= 31) window.decorView.setRenderEffect(null)
+    // The leave hint arrives before onPause, so the blur has the best chance of being drawn before Android takes the preview.
+    override fun onUserLeaveHint() { super.onUserLeaveHint(); blurNow() }
+
+    private fun shield(on: Boolean) {
+        if (on && !AppLock.blockScreenshots(this)) return
+        PrivacyShield.covered = on
+        if (android.os.Build.VERSION.SDK_INT >= 31) {
+            window.decorView.setRenderEffect(if (on) android.graphics.RenderEffect.createBlurEffect(60f, 60f, android.graphics.Shader.TileMode.CLAMP) else null)
+        }
     }
+
+    // Recents/Home press: cover as early as possible so the system snapshot already shows the blur.
+    override fun onUserLeaveHint() { super.onUserLeaveHint(); shield(true) }
+    override fun onPause() { super.onPause(); shield(true) }
+    override fun onResume() { super.onResume(); shield(false) }
 
     private fun scheduleReminders() {
         val work = PeriodicWorkRequestBuilder<ReminderWorker>(24, TimeUnit.HOURS).build()
@@ -233,16 +245,14 @@ private fun FinCipApp(store: FinanceStore, securePrefs: SecurePrefs) {
     var hapticOn by remember { mutableStateOf(context.getSharedPreferences("fincip_ui", 0).getBoolean("haptic", true)) }
     Feedback.sound = soundOn; Feedback.haptic = hapticOn
     var locked by remember { mutableStateOf(AppLock.lockEnabled(context)) }
-    var covered by remember { mutableStateOf(false) }
-    // "Blur in recent apps" no longer uses FLAG_SECURE (that made the preview solid black); the cover and blur are drawn instead.
-    fun applySecure(@Suppress("UNUSED_PARAMETER") on: Boolean) { (context as? Activity)?.window?.clearFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE) }
+    val covered = PrivacyShield.covered
+    // Block screenshots uses FLAG_SECURE. "Blur in recent apps" is separate and draws a blurred cover instead.
+    fun applySecure(on: Boolean) { (context as? Activity)?.window?.let { w -> if (on) w.addFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE) else w.clearFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE) } }
     androidx.compose.runtime.DisposableEffect(Unit) {
-        applySecure(AppLock.blockScreenshots(context))
+        applySecure(AppLock.noScreenshots(context))
         var stoppedAt = 0L
         val owner = (context as? androidx.activity.ComponentActivity)
         val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
-            if (event == androidx.lifecycle.Lifecycle.Event.ON_PAUSE) covered = AppLock.blockScreenshots(context)
-            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) covered = false
             if (event == androidx.lifecycle.Lifecycle.Event.ON_STOP) stoppedAt = android.os.SystemClock.elapsedRealtime()
             if (event == androidx.lifecycle.Lifecycle.Event.ON_START && stoppedAt > 0 && AppLock.lockEnabled(context) &&
                 android.os.SystemClock.elapsedRealtime() - stoppedAt >= AppLock.timeoutSeconds(context) * 1000L) locked = true
@@ -956,7 +966,7 @@ private fun FinCipApp(store: FinanceStore, securePrefs: SecurePrefs) {
               )
             }
         }
-        if (covered) PrivacyCover()
+        if (PrivacyShield.covered) PrivacyCover()
     }
 
     if (editingProfile) {
@@ -1064,6 +1074,11 @@ private fun transactionFingerprint(t: JsonObject): String = listOf(
     t.string("date"), t.string("type"), "%.2f".format(Locale.US, t.double("amount")),
     t.string("currency", "INR").uppercase(Locale.ROOT), t.string("title").trim().lowercase(Locale.ROOT)
 ).joinToString("|")
+
+object PrivacyShield { var covered by mutableStateOf(false) }
+
+/** Shared between the activity (which sees the user leaving first) and the Compose cover. */
+object PrivacyShield { var covered by mutableStateOf(false) }
 
 @Composable
 private fun PrivacyCover() {
