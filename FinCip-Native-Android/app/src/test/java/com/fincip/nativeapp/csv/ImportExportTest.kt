@@ -9,7 +9,7 @@ class ImportExportTest {
     private fun imp(csv: String, existing: ExistingIndex = ExistingIndex(emptyList())) = ImportEngine.parse(csv, existing)
 
     @Test fun phonepeStyle() {
-        val p = imp("Date,Transaction Details,Type,Amount\n"Nov 02, 2026",Paid to Swiggy,DEBIT,₹450.50\n"Nov 03, 2026",Received from Rahul,CREDIT,\"₹1,200.00\"\n")
+        val p = imp("Date,Transaction Details,Type,Amount\n\"Nov 02, 2026\",Paid to Swiggy,DEBIT,₹450.50\n\"Nov 03, 2026\",Received from Rahul,CREDIT,\"₹1,200.00\"\n")
         assertEquals(2, p.fresh.size)
         val a = p.fresh[0]; assertEquals("2026-11-02", a.date); assertEquals("expense", a.type); assertEquals(450.50, a.amount, 0.0); assertEquals("Food", a.category)
         val b = p.fresh[1]; assertEquals("income", b.type); assertEquals(1200.0, b.amount, 0.0)
