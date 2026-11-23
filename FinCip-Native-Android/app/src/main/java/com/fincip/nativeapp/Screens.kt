@@ -313,7 +313,7 @@ private fun TransactionCard(item: JsonObject, privacy: Boolean, onClick: () -> U
     val income = com.fincip.nativeapp.data.isInflow(item)
     NeoCard {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            Box(Modifier.size(42.dp).background(if (income) Pop.Mint else Pop.Coral.copy(alpha = .28f), CircleShape), contentAlignment = Alignment.Center) { Text(if (income) "↙" else "↗", fontWeight = FontWeight.Black, color = Pop.Ink) }
+            com.fincip.nativeapp.ui.CategoryBadge(if (item.string("type") == "transfer") "Transfer" else item.string("category", "Other"), 46.dp)
             Column(Modifier.weight(1f)) {
                 Text(item.string("title", "Transaction"), fontWeight = FontWeight.Black)
                 Text("${item.string("category", "Other")} · ${item.string("date")} · ${item.string("account", "Account")}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .65f))
@@ -321,6 +321,7 @@ private fun TransactionCard(item: JsonObject, privacy: Boolean, onClick: () -> U
                 if (extra.isNotBlank()) Text(extra, style = MaterialTheme.typography.labelSmall)
             }
             Column(horizontalAlignment = Alignment.End) {
+                Text(com.fincip.nativeapp.ui.directionLabel(item.string("type")), fontSize = 9.sp, fontWeight = FontWeight.Black, letterSpacing = .8.sp, color = (if (income) Green else Red).copy(alpha = .8f))
                 Text(if (privacy) "••••" else (if (income) "+" else "−") + money(item.double("amount"), item.string("currency", "INR")), color = if (income) Green else Red, fontWeight = FontWeight.Black)
                 Row {
                     Text("Edit", style = MaterialTheme.typography.labelSmall, modifier = Modifier.clickable(onClick = onClick).padding(4.dp))

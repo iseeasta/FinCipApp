@@ -529,7 +529,11 @@ private fun AppRow(pr: ExportProfile, selected: Boolean, onClick: () -> Unit) {
         Modifier.fillMaxWidth().padding(vertical = 3.dp).clip(RoundedCornerShape(14.dp)).background(if (selected) scheme.primaryContainer else Color.Transparent).clickable(enabled = pr.enabled) { onClick() }.padding(8.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Box(Modifier.size(40.dp).clip(CircleShape).background(Color(pr.brandColor)), contentAlignment = Alignment.Center) { Text(pr.initials, color = Color.White, fontWeight = FontWeight.Black, fontSize = 13.sp) }
+        val ctx = LocalContext.current
+        // Drop an official logo into res/drawable as logo_<id>.png (e.g. logo_phonepe.png) and it is picked up automatically.
+        val logo = remember(pr.id) { ctx.resources.getIdentifier("logo_${pr.id}", "drawable", ctx.packageName) }
+        if (logo != 0) androidx.compose.foundation.Image(androidx.compose.ui.res.painterResource(logo), pr.name, Modifier.size(40.dp).clip(RoundedCornerShape(12.dp)))
+        else Box(Modifier.size(40.dp).clip(RoundedCornerShape(12.dp)).background(Color(pr.brandColor)), contentAlignment = Alignment.Center) { Text(pr.initials, color = Color.White, fontWeight = FontWeight.Black, fontSize = 13.sp) }
         Column(Modifier.weight(1f)) {
             Text(pr.name, fontWeight = FontWeight.Bold, color = if (pr.enabled) scheme.onSurface else scheme.onSurface.copy(alpha = .45f))
             CompatBadge(pr.compat)

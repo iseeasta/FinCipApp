@@ -981,7 +981,13 @@ private fun FinCipApp(store: FinanceStore, securePrefs: SecurePrefs) {
             contribution = formContribution, onContribution = { formContribution = it }, deadline = formDeadline, onDeadline = { formDeadline = it },
             frequency = formFrequency, onFrequency = { formFrequency = it }, rate = formRate, onRate = { formRate = it },
             extra = formExtra, onExtra = { formExtra = it }, shared = formShared, onShared = { formShared = it },
-            onSave = { saveForm() }, onDismiss = { dialogType = "" }
+            onSave = { saveForm() }, onDismiss = { dialogType = "" },
+            suggestions = com.fincip.nativeapp.ui.FormSuggestions(
+                projects = transactions(workspace).map { it.string("project") }.filter { it.isNotBlank() }.groupingBy { it }.eachCount().entries.sortedByDescending { it.value }.map { it.key },
+                tags = transactions(workspace).flatMap { t -> t.arrayOrEmpty("tags").map { it.asStringOr() } }.filter { it.isNotBlank() && it != "imported" }.groupingBy { it }.eachCount().entries.sortedByDescending { it.value }.map { it.key },
+                people = transactions(workspace).map { it.string("person") }.filter { it.isNotBlank() }.groupingBy { it }.eachCount().entries.sortedByDescending { it.value }.map { it.key },
+                accounts = transactions(workspace).map { it.string("account") }.filter { it.isNotBlank() }.distinct()
+            )
         )
     }
     if (backupPasswordDialog) {
@@ -1105,7 +1111,7 @@ private fun FinanceEntryDialog(
     contribution: String, onContribution: (String) -> Unit, deadline: String, onDeadline: (String) -> Unit,
     frequency: String, onFrequency: (String) -> Unit, rate: String, onRate: (String) -> Unit,
     extra: String, onExtra: (String) -> Unit, shared: Boolean, onShared: (Boolean) -> Unit,
-    onSave: () -> Unit, onDismiss: () -> Unit
+    onSave: () -> Unit, onDismiss: () -> Unit, suggestions: com.fincip.nativeapp.ui.FormSuggestions = com.fincip.nativeapp.ui.FormSuggestions()
 ) {
     val title = when (type) { "transaction" -> "Add transaction"; "budget" -> "Set budget"; "goal" -> "Create goal"; "contribution" -> "Add contribution"; "bill" -> "Add recurring bill"; "investment" -> "Add portfolio holding"; "asset" -> "Add net-worth item"; "product" -> "Add finance product"; "productContribution" -> "Record investment contribution"; "emergency" -> "Emergency fund settings"; "rule" -> "Add smart rule"; else -> "FinCip entry" }
     val hasAmount = type in listOf("contribution", "productContribution", "emergency", "transaction", "budget", "goal", "bill", "investment", "asset", "product")
@@ -1160,13 +1166,14 @@ private fun FinanceEntryDialog(
                 }
                 // ---- Scrollable form body
                 Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 18.dp, vertical = 16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                    if (type == "transaction") PopSegmented(listOf("expense" to "↗  Expense", "income" to "↙  Income"), transactionType, onTransactionType)
+                    if (type == "transaction") PopSegmented(listOf("expense" to "↗  Expense", "income" to "↙  Income"), transactionType) { t -> onTransactionType(t); val pool = if (t == "income") com.fincip.nativeapp.ui.INCOME_CATEGORIES else com.fincip.nativeapp.ui.EXPENSE_CATEGORIES; if (category !in pool) onCategory(if (t == "income") "Salary" else "Food") }
                     if (type == "goal") PopSegmented(listOf("savings" to "Savings goal", "debt" to "Debt payoff"), transactionType, onTransactionType)
                     if (type == "bill") PopSegmented(listOf("weekly" to "Weekly", "monthly" to "Monthly", "yearly" to "Yearly"), frequency, onFrequency)
-                    if (categoryOptions != null) PopChipPicker(categoryLabel, categoryOptions, category, onCategory)
+                    if (categoryOptions != null && type != "transaction") PopChipPicker(categoryLabel, categoryOptions, category, onCategory)
                     if (hasAmount) PopChipPicker("Currency", CURRENCY_INFO.map { it.code }, currency, onCurrency)
 
-                    NeoCard {
+                    if (type == "transaction") com.fincip.nativeapp.ui.TransactionFormBody(transactionType == "income", name, onName, category, onCategory, date, onDate, account, onAccount, person, onPerson, project, onProject, tags, onTags, extra, onExtra, suggestions)
+                    if (type != "transaction") NeoCard {
                         Text("DETAILS", style = MaterialTheme.typography.labelSmall, letterSpacing = 1.2.sp, fontWeight = FontWeight.Black, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .55f))
                         Spacer(Modifier.height(10.dp))
                         Column(verticalArrangement = fieldGap) {

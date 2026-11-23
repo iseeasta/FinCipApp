@@ -334,15 +334,16 @@ fun AnalyticsOverview(
                 val title = tx.string("title").ifBlank { tx.string("category", "Entry") }
                 Surface(Modifier.fillMaxWidth().clickable { onEditTx(tx) }, shape = RoundedCornerShape(20.dp), color = scheme.surface, border = BorderStroke(1.dp, scheme.outlineVariant)) {
                     Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Box(Modifier.size(42.dp).clip(CircleShape).background(if (isIncome) scheme.primary.copy(alpha = .9f) else scheme.secondary), contentAlignment = Alignment.Center) {
-                            Text(title.take(1).uppercase(), fontWeight = FontWeight.Black, color = Pop.Ink)
-                        }
+                        com.fincip.nativeapp.ui.CategoryBadge(if (tx.string("type") == "transfer") "Transfer" else tx.string("category", "Other"), 44.dp)
                         Column(Modifier.weight(1f)) {
                             Text(title, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                             Text("${tx.string("category", "Other")} · ${tx.string("date")}", fontSize = 12.sp, color = scheme.onSurface.copy(alpha = .6f), maxLines = 1)
                         }
                         val amt = toBase(workspace, tx.double("amount"), tx.string("currency", "INR"))
-                        Text(if (privacy) mask else (if (isIncome) "+" else "−") + money(amt, base), fontWeight = FontWeight.Bold, color = if (isIncome) Pop.Teal else Pop.Coral, maxLines = 1)
+                        Column(horizontalAlignment = Alignment.End) {
+                            Text(com.fincip.nativeapp.ui.directionLabel(tx.string("type")), fontSize = 9.sp, fontWeight = FontWeight.Black, letterSpacing = .8.sp, color = (if (isIncome) Pop.Teal else Pop.Coral).copy(alpha = .85f))
+                            Text(if (privacy) mask else (if (isIncome) "+" else "−") + money(amt, base), fontWeight = FontWeight.Bold, color = if (isIncome) Pop.Teal else Pop.Coral, maxLines = 1)
+                        }
                     }
                 }
             }

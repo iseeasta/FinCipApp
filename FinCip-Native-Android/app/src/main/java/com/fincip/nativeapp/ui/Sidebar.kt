@@ -52,6 +52,7 @@ import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.ShowChart
 import androidx.compose.material.icons.filled.Timeline
 import androidx.compose.material.icons.filled.Wallet
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -99,7 +100,7 @@ private fun groupIcon(group: String): ImageVector = when (group) {
 
 private fun pageIcon(id: String): ImageVector = when (id) {
     "overview" -> Icons.Default.Dashboard
-    "transactions" -> Icons.Default.SwapHoriz
+    "transactions" -> Icons.Default.History
     "dataio" -> Icons.Default.SwapHoriz
     "recurring" -> Icons.Default.Autorenew
     "calendar" -> Icons.Default.Event
