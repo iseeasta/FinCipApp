@@ -85,6 +85,7 @@ fun summarize(t: List<ExTxn>) = ExportSummary(
 private fun amt(v: Double) = "%.2f".format(Locale.US, v)
 private fun signed(t: ExTxn) = (if (t.isIn) "" else "-") + amt(t.amount)
 private fun drcr(t: ExTxn) = if (t.isIn) "CREDIT" else "DEBIT"
+private fun narr(t: ExTxn) = Csv.guard(t.title + if (t.note.isNotBlank()) " | " + t.note else "")
 private fun txt(s: String) = Csv.guard(s)
 
 object Profiles {
@@ -181,27 +182,27 @@ object Profiles {
         listOf(Col("Date", true) { it.date.format(fmt("dd-MM-yyyy")) }, Col("Transaction ID") { it.ref }, Col("Description", true) { txt(it.title) }, Col("Debit") { if (!it.isIn) amt(it.amount) else "" }, Col("Credit") { if (it.isIn) amt(it.amount) else "" }), noBalance)
 
     val sbi = stmt("sbi", "YONO SBI", AppGroup.BANK, 0xFF22409A, "SB", "SBI/YONO downloads account statements; banks do not import external transactions. $STATEMENT_NOTE", "dd MMM yyyy",
-        listOf(Col("Txn Date", true) { it.date.format(fmt("dd MMM yyyy")) }, Col("Value Date") { it.date.format(fmt("dd MMM yyyy")) }, Col("Description", true) { txt(it.title) }, Col("Ref No./Cheque No.") { it.ref },
+        listOf(Col("Txn Date", true) { it.date.format(fmt("dd MMM yyyy")) }, Col("Value Date") { it.date.format(fmt("dd MMM yyyy")) }, Col("Description", true) { narr(it) }, Col("Ref No./Cheque No.") { it.ref },
             Col("Debit", true) { if (!it.isIn) amt(it.amount) else "" }, Col("Credit", true) { if (it.isIn) amt(it.amount) else "" }, Col("Balance") { "" }), noBalance, fileTag = "SBI_Bank_Statement")
     val hdfc = stmt("hdfc", "HDFC Bank", AppGroup.BANK, 0xFF004C8F, "HD", "HDFC NetBanking/MobileBanking provides statement downloads; no external import. $STATEMENT_NOTE", "dd/MM/yy",
-        listOf(Col("Date", true) { it.date.format(fmt("dd/MM/yy")) }, Col("Narration", true) { txt(it.title) }, Col("Chq./Ref.No.") { it.ref }, Col("Value Dt") { it.date.format(fmt("dd/MM/yy")) },
+        listOf(Col("Date", true) { it.date.format(fmt("dd/MM/yy")) }, Col("Narration", true) { narr(it) }, Col("Chq./Ref.No.") { it.ref }, Col("Value Dt") { it.date.format(fmt("dd/MM/yy")) },
             Col("Withdrawal Amt.", true) { if (!it.isIn) amt(it.amount) else "" }, Col("Deposit Amt.", true) { if (it.isIn) amt(it.amount) else "" }, Col("Closing Balance") { "" }), noBalance, fileTag = "HDFC_Bank_Statement")
     val icici = stmt("icici", "ICICI Bank", AppGroup.BANK, 0xFFB02A30, "IC", "iMobile/NetBanking provides statement downloads; no external import. $STATEMENT_NOTE", "dd/MM/yyyy",
         listOf(Col("S No.") { "" }, Col("Value Date") { it.date.format(fmt("dd/MM/yyyy")) }, Col("Transaction Date", true) { it.date.format(fmt("dd/MM/yyyy")) }, Col("Cheque Number") { it.ref },
-            Col("Transaction Remarks", true) { txt(it.title) }, Col("Withdrawal Amount (INR )", true) { if (!it.isIn) amt(it.amount) else "" }, Col("Deposit Amount (INR )", true) { if (it.isIn) amt(it.amount) else "" }, Col("Balance (INR )") { "" }), noBalance, fileTag = "ICICI_Bank_Statement")
+            Col("Transaction Remarks", true) { narr(it) }, Col("Withdrawal Amount (INR )", true) { if (!it.isIn) amt(it.amount) else "" }, Col("Deposit Amount (INR )", true) { if (it.isIn) amt(it.amount) else "" }, Col("Balance (INR )") { "" }), noBalance, fileTag = "ICICI_Bank_Statement")
     val axis = stmt("axis", "Axis Mobile", AppGroup.BANK, 0xFF97144D, "Ax", "Axis Mobile/Internet Banking provides statements; no external import. $STATEMENT_NOTE", "dd-MM-yyyy",
-        listOf(Col("SRL NO") { "" }, Col("Tran Date", true) { it.date.format(fmt("dd-MM-yyyy")) }, Col("CHQNO") { it.ref }, Col("PARTICULARS", true) { txt(it.title) },
+        listOf(Col("SRL NO") { "" }, Col("Tran Date", true) { it.date.format(fmt("dd-MM-yyyy")) }, Col("CHQNO") { it.ref }, Col("PARTICULARS", true) { narr(it) },
             Col("DR", true) { if (!it.isIn) amt(it.amount) else "" }, Col("CR", true) { if (it.isIn) amt(it.amount) else "" }, Col("BAL") { "" }), noBalance, fileTag = "Axis_Bank_Statement")
     val kotak = stmt("kotak", "Kotak Mobile Banking", AppGroup.BANK, 0xFFED1C24, "Kt", "Kotak provides statement downloads; no external import. $STATEMENT_NOTE", "dd-MM-yyyy",
-        listOf(Col("Sl. No.") { "" }, Col("Transaction Date", true) { it.date.format(fmt("dd-MM-yyyy")) }, Col("Value Date") { it.date.format(fmt("dd-MM-yyyy")) }, Col("Description", true) { txt(it.title) }, Col("Chq / Ref No.") { it.ref },
+        listOf(Col("Sl. No.") { "" }, Col("Transaction Date", true) { it.date.format(fmt("dd-MM-yyyy")) }, Col("Value Date") { it.date.format(fmt("dd-MM-yyyy")) }, Col("Description", true) { narr(it) }, Col("Chq / Ref No.") { it.ref },
             Col("Debit", true) { if (!it.isIn) amt(it.amount) else "" }, Col("Credit", true) { if (it.isIn) amt(it.amount) else "" }, Col("Balance") { "" }, Col("Dr / Cr") { if (it.isIn) "CR" else "DR" }), noBalance, fileTag = "Kotak_Bank_Statement")
     val idfc = stmt("idfc", "IDFC FIRST Bank", AppGroup.BANK, 0xFF9C1D26, "ID", "IDFC FIRST provides statement downloads; no external import. $STATEMENT_NOTE", "dd-MMM-yyyy",
-        listOf(Col("Transaction Date", true) { it.date.format(fmt("dd-MMM-yyyy")) }, Col("Value Date") { it.date.format(fmt("dd-MMM-yyyy")) }, Col("Particulars", true) { txt(it.title) }, Col("Cheque No.") { it.ref },
+        listOf(Col("Transaction Date", true) { it.date.format(fmt("dd-MMM-yyyy")) }, Col("Value Date") { it.date.format(fmt("dd-MMM-yyyy")) }, Col("Particulars", true) { narr(it) }, Col("Cheque No.") { it.ref },
             Col("Debit", true) { if (!it.isIn) amt(it.amount) else "" }, Col("Credit", true) { if (it.isIn) amt(it.amount) else "" }, Col("Balance") { "" }), noBalance, fileTag = "IDFCFirst_Bank_Statement")
     val jupiter = stmt("jupiter", "Jupiter Money", AppGroup.BANK, 0xFFFFB400, "Jp", "Jupiter (neobank, partner-bank accounts) provides statements; no external import. Generic statement layout. $STATEMENT_NOTE", "dd/MM/yyyy",
-        listOf(Col("Date", true) { it.date.format(fmt("dd/MM/yyyy")) }, Col("Description", true) { txt(it.title) }, Col("Debit") { if (!it.isIn) amt(it.amount) else "" }, Col("Credit") { if (it.isIn) amt(it.amount) else "" }, Col("Balance") { "" }), noBalance, fileTag = "Jupiter")
+        listOf(Col("Date", true) { it.date.format(fmt("dd/MM/yyyy")) }, Col("Description", true) { narr(it) }, Col("Debit") { if (!it.isIn) amt(it.amount) else "" }, Col("Credit") { if (it.isIn) amt(it.amount) else "" }, Col("Balance") { "" }), noBalance, fileTag = "Jupiter")
     val fi = stmt("fi", "Fi Money", AppGroup.BANK, 0xFF00B386, "Fi", "Fi (neobank, partner-bank accounts) provides statements; no external import. Generic statement layout. $STATEMENT_NOTE", "dd/MM/yyyy",
-        listOf(Col("Date", true) { it.date.format(fmt("dd/MM/yyyy")) }, Col("Description", true) { txt(it.title) }, Col("Debit") { if (!it.isIn) amt(it.amount) else "" }, Col("Credit") { if (it.isIn) amt(it.amount) else "" }, Col("Balance") { "" }), noBalance, fileTag = "FiMoney")
+        listOf(Col("Date", true) { it.date.format(fmt("dd/MM/yyyy")) }, Col("Description", true) { narr(it) }, Col("Debit") { if (!it.isIn) amt(it.amount) else "" }, Col("Credit") { if (it.isIn) amt(it.amount) else "" }, Col("Balance") { "" }), noBalance, fileTag = "FiMoney")
 
     val all: List<ExportProfile> = listOf(
         phonepe, gpay, paytm, bhim, sbi, hdfc, icici, axis, kotak, idfc, jupiter, fi,
