@@ -49,6 +49,7 @@ import androidx.compose.ui.unit.sp
 import com.fincip.nativeapp.data.AppIconOption
 import com.fincip.nativeapp.data.AppIcons
 import com.fincip.nativeapp.data.AppLock
+import com.fincip.nativeapp.data.arrayOrEmpty
 import com.fincip.nativeapp.data.double
 import com.fincip.nativeapp.data.objectOrEmpty
 import com.fincip.nativeapp.data.string
