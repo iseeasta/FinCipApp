@@ -100,7 +100,7 @@ private fun groupIcon(group: String): ImageVector = when (group) {
 private fun pageIcon(id: String): ImageVector = when (id) {
     "overview" -> Icons.Default.Dashboard
     "transactions" -> Icons.Default.SwapHoriz
-    "dataio" -> Icons.Default.CloudUpload
+    "dataio" -> Icons.Default.SwapHoriz
     "recurring" -> Icons.Default.Autorenew
     "calendar" -> Icons.Default.Event
     "subscriptions" -> Icons.Default.Receipt
