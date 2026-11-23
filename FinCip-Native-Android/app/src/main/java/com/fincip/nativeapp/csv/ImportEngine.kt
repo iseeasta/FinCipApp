@@ -304,7 +304,7 @@ object ImportEngine {
     // ---------- amounts ----------
     private val DR_END = Regex("(^|[\\s\\d.)])(dr|debit)\\.?$"); private val DR_START = Regex("^(dr|debit)[\\s.:]")
     private val CR_END = Regex("(^|[\\s\\d.)])(cr|credit)\\.?$"); private val CR_START = Regex("^(cr|credit)[\\s.:]")
-    private val WORDS = Regex("(?i)\\b(rs\\.?|inr|usd|eur|gbp|cr|dr|debit|credit)\\b"); private val SYMS = Regex("[₹$€£¥\\s\\u00A0]")
+    private val WORDS = Regex("(?i)\\b(rs|inr|usd|eur|gbp|cr|dr|debit|credit)\\b\\.?"); private val SYMS = Regex("[₹$€£¥\\s\\u00A0]")
     /** Returns (signed value, "income"/"expense" if a Dr/Cr marker was present). */
     fun parseAmount(raw: String): Pair<Double, String?>? {
         var s = raw.trim(); if (s.isEmpty()) return null
