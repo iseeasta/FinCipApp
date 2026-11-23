@@ -327,10 +327,10 @@ fun AnalyticsOverview(
                 Text("Transactions history", Modifier.weight(1f), fontWeight = FontWeight.Bold, fontSize = 16.sp)
                 Text("View all", Modifier.clip(RoundedCornerShape(50)).clickable { onOpen("transactions") }.padding(8.dp), color = scheme.primary, fontWeight = FontWeight.Bold, fontSize = 13.sp)
             }
-            val shown = txs.filter { filter != "Income" || it.string("type") == "income" }.filter { filter != "Outcome" || it.string("type") != "income" }
+            val shown = txs.filter { filter != "Income" || it.string("type") == "income" }.filter { filter != "Outcome" || com.fincip.nativeapp.data.isSpend(it) }
                 .sortedByDescending { it.string("date") }.take(4)
             shown.forEach { tx ->
-                val isIncome = tx.string("type") == "income"
+                val isIncome = com.fincip.nativeapp.data.isInflow(tx)
                 val title = tx.string("title").ifBlank { tx.string("category", "Entry") }
                 Surface(Modifier.fillMaxWidth().clickable { onEditTx(tx) }, shape = RoundedCornerShape(20.dp), color = scheme.surface, border = BorderStroke(1.dp, scheme.outlineVariant)) {
                     Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -419,7 +419,7 @@ private fun WidgetEditor(current: List<String>, onSave: (List<String>) -> Unit, 
 @Composable
 private fun BudgetsWidget(workspace: JsonObject, month: String, base: String, privacy: Boolean, onOpen: (String) -> Unit) {
     val budgets = workspace.arrayOrEmpty("budgets").objects()
-    val tx = com.fincip.nativeapp.data.monthlyTransactions(workspace, month).filter { it.string("type") != "income" }
+    val tx = com.fincip.nativeapp.data.monthlyTransactions(workspace, month).filter { com.fincip.nativeapp.data.isSpend(it) }
     Text("Budgets", fontWeight = FontWeight.Bold, fontSize = 16.sp)
     if (budgets.isEmpty()) { NeoCard { Text("No budgets yet."); Spacer(Modifier.height(8.dp)); NeoOutlineButton("Set a budget", { onOpen("budgets") }, Modifier.fillMaxWidth()) }; return }
     budgets.take(5).forEach { b ->
@@ -451,7 +451,7 @@ private fun BillsWidget(workspace: JsonObject, base: String, privacy: Boolean, o
 
 @Composable
 private fun CategoriesWidget(workspace: JsonObject, month: String, base: String, privacy: Boolean) {
-    val by = com.fincip.nativeapp.data.monthlyTransactions(workspace, month).filter { it.string("type") != "income" }
+    val by = com.fincip.nativeapp.data.monthlyTransactions(workspace, month).filter { com.fincip.nativeapp.data.isSpend(it) }
         .groupBy { it.string("category", "Other").ifBlank { "Other" } }
         .mapValues { (_, l) -> l.sumOf { toBase(workspace, it.double("amount"), it.string("currency", "INR")) } }.entries.sortedByDescending { it.value }.take(5)
     Text("Top spending this month", fontWeight = FontWeight.Bold, fontSize = 16.sp)

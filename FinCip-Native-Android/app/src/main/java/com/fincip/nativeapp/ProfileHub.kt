@@ -264,8 +264,6 @@ private fun LockCard(onBlockScreens: (Boolean) -> Unit) {
     var enabled by remember { mutableStateOf(AppLock.lockEnabled(context)) }
     var bio by remember { mutableStateOf(AppLock.biometricEnabled(context)) }
     var timeout by remember { mutableIntStateOf(AppLock.timeoutSeconds(context)) }
-    var secure by remember { mutableStateOf(AppLock.blockScreenshots(context)) }
-    var captures by remember { mutableStateOf(AppLock.blockCaptures(context)) }
     var mode by remember { mutableStateOf("") } // "", "setup", "verify-change", "verify-remove"
     var type by remember { mutableStateOf("password") }
     var first by remember { mutableStateOf<String?>(null) }
@@ -345,10 +343,8 @@ private fun LockCard(onBlockScreens: (Boolean) -> Unit) {
         }
     }
     NeoCard {
-        var noShots by remember { mutableStateOf(AppLock.noScreenshots(context)) }
-        SwitchRow("Blur in recent apps", "Shows a blurred cover instead of your numbers in the app switcher.", secure) { secure = it; AppLock.setBlockScreenshots(context, it) }
-        Spacer(Modifier.height(10.dp))
-        SwitchRow("Block screenshots", "Stops screenshots and screen recording inside FinCip. Android also shows a plain black card in recent apps while this is on.", noShots) { noShots = it; AppLock.setNoScreenshots(context, it); onBlockScreens(it) }
+        var privacy by remember { mutableStateOf(AppLock.privacyScreen(context)) }
+        SwitchRow("Privacy screen", "Hides FinCip in the recent-apps switcher and blocks screenshots and screen recording. While on, you cannot screenshot FinCip yourself.", privacy) { privacy = it; AppLock.setPrivacyScreen(context, it); onBlockScreens(it) }
     }
 }
 
@@ -588,7 +584,7 @@ private fun ProfilePage(workspace: JsonObject, onProfileChange: (JsonObject.() -
     PHeader("Financial journey")
     val ym = java.time.YearMonth.now()
     val budgets = workspace.arrayOrEmpty("budgets").objects()
-    val spendNow = com.fincip.nativeapp.data.monthlyTransactions(workspace, ym.toString()).filter { it.string("type") != "income" }
+    val spendNow = com.fincip.nativeapp.data.monthlyTransactions(workspace, ym.toString()).filter { com.fincip.nativeapp.data.isSpend(it) }
     val onTrack = budgets.count { b ->
         val spent = spendNow.filter { it.string("category").equals(b.string("category"), true) }.sumOf { com.fincip.nativeapp.data.toBase(workspace, it.double("amount"), it.string("currency", "INR")) }
         spent <= com.fincip.nativeapp.data.toBase(workspace, b.double("limit"), b.string("currency", base))

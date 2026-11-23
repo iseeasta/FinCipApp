@@ -26,6 +26,21 @@ jobs:
           accept-android-sdk-licenses: 'true'
           packages: 'platform-tools'
 
+      - name: Unit tests (CSV import/export engine)
+        working-directory: FinCip-Native-Android
+        run: |
+          chmod +x ./gradlew
+          ./gradlew --no-daemon testDebugUnitTest
+
+      - name: Upload test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-test-report
+          path: FinCip-Native-Android/app/build/reports/tests/testDebugUnitTest
+          if-no-files-found: ignore
+          retention-days: 7
+
       - name: Build APK
         working-directory: FinCip-Native-Android
         run: |

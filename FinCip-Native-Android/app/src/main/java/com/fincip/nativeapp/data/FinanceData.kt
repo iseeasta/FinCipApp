@@ -30,6 +30,7 @@ data class NavPage(val id: String, val title: String, val group: String, val gly
 val NAV_PAGES = listOf(
     NavPage("overview", "Overview", "Home", "▦"),
     NavPage("transactions", "Transactions", "Money", "↔"),
+    NavPage("dataio", "Import & export", "Money", "⇅"),
     NavPage("recurring", "Bills & repeats", "Money", "◷"),
     NavPage("calendar", "Money calendar", "Money", "▦"),
     NavPage("subscriptions", "Subscriptions", "Money", "⟳"),
@@ -108,8 +109,17 @@ fun toBase(workspace: JsonObject, amount: Double, currency: String): Double {
 
 fun transactions(workspace: JsonObject): List<JsonObject> = workspace.arrayOrEmpty("transactions").objects()
 fun monthlyTransactions(workspace: JsonObject, month: String): List<JsonObject> = transactions(workspace).filter { it.string("date").startsWith(month) }
+/** Money going out. Transfers between your own accounts and refunds are not spending. */
+fun isSpend(t: JsonObject): Boolean = t.string("type") !in setOf("income", "transfer", "refund")
+/** Money coming in for display purposes (income or a refund). */
+fun isInflow(t: JsonObject): Boolean = t.string("type").let { it == "income" || it == "refund" }
 fun incomeTotal(workspace: JsonObject, month: String? = null): Double = (if (month == null) transactions(workspace) else monthlyTransactions(workspace, month)).filter { it.string("type") == "income" }.sumOf { toBase(workspace, it.double("amount"), it.string("currency", "INR")) }
-fun expenseTotal(workspace: JsonObject, month: String? = null): Double = (if (month == null) transactions(workspace) else monthlyTransactions(workspace, month)).filter { it.string("type") != "income" }.sumOf { toBase(workspace, it.double("amount"), it.string("currency", "INR")) }
+fun expenseTotal(workspace: JsonObject, month: String? = null): Double {
+    val rows = if (month == null) transactions(workspace) else monthlyTransactions(workspace, month)
+    val spent = rows.filter { isSpend(it) }.sumOf { toBase(workspace, it.double("amount"), it.string("currency", "INR")) }
+    val refunded = rows.filter { it.string("type") == "refund" }.sumOf { toBase(workspace, it.double("amount"), it.string("currency", "INR")) }
+    return spent - refunded
+}
 fun normalizeTaxCountry(value: String): String = when (value.trim().uppercase(Locale.ROOT)) {
     "IN", "INDIA" -> "IN"
     "US", "USA", "UNITED STATES" -> "US"

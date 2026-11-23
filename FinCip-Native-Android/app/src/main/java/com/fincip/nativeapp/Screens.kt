@@ -149,7 +149,7 @@ private fun CardLabel(text: String) {
 }
 
 private fun spendByCategory(workspace: JsonObject, month: String): List<Pair<String, Double>> =
-    monthlyTransactions(workspace, month).filter { it.string("type") != "income" }
+    monthlyTransactions(workspace, month).filter { com.fincip.nativeapp.data.isSpend(it) }
         .groupBy { it.string("category", "Other").ifBlank { "Other" } }
         .mapValues { (_, v) -> v.sumOf { toBase(workspace, it.double("amount"), it.string("currency", "INR")) } }
         .toList().sortedByDescending { it.second }
@@ -196,7 +196,7 @@ private fun CashFlowCard(workspace: JsonObject, month: String, privacy: Boolean,
 private fun WeeklySpendCard(workspace: JsonObject, month: String, privacy: Boolean) {
     val ym = parseMonth(month)
     val weekCount = if (ym.lengthOfMonth() > 28) 5 else 4
-    val spendTx = monthlyTransactions(workspace, month).filter { it.string("type") != "income" }
+    val spendTx = monthlyTransactions(workspace, month).filter { com.fincip.nativeapp.data.isSpend(it) }
     val weeks = (0 until weekCount).map { w ->
         val lo = w * 7 + 1
         val hi = if (w == weekCount - 1) 31 else w * 7 + 7
@@ -211,7 +211,7 @@ private fun WeeklySpendCard(workspace: JsonObject, month: String, privacy: Boole
 
 private fun budgetUsed(workspace: JsonObject, month: String, b: JsonObject): Double {
     val cur = b.string("currency", "INR")
-    return monthlyTransactions(workspace, month).filter { it.string("type") != "income" }.sumOf { tx ->
+    return monthlyTransactions(workspace, month).filter { com.fincip.nativeapp.data.isSpend(it) }.sumOf { tx ->
         if (tx.string("currency", "INR") != cur) 0.0 else {
             val splits = tx.arrayOrEmpty("splits").objects()
             if (splits.isNotEmpty()) splits.filter { it.string("category") == b.string("category") }.sumOf { it.double("amount") }
@@ -261,7 +261,7 @@ fun OverviewScreen(workspace: JsonObject, month: String, privacy: Boolean, savin
     val expenses = expenseTotal(workspace, month)
     val allTransactions = transactions(workspace)
     val takeout = monthlyTransactions(workspace, month).filter { t ->
-        t.string("type") != "income" && (t.string("category").contains("food", true) || t.string("title").contains("takeout", true) || t.string("title").contains("restaurant", true))
+        com.fincip.nativeapp.data.isSpend(t) && (t.string("category").contains("food", true) || t.string("title").contains("takeout", true) || t.string("title").contains("restaurant", true))
     }.sumOf { toBase(workspace, it.double("amount"), it.string("currency", "INR")) }
     val foodBudget = workspace.arrayOrEmpty("budgets").objects().filter { it.string("category").contains("food", true) }.sumOf { toBase(workspace, it.double("limit"), it.string("currency", base)) }
     val ramen = foodBudget > 0 && takeout > foodBudget
@@ -310,7 +310,7 @@ fun TransactionsScreen(workspace: JsonObject, month: String, privacy: Boolean, q
 
 @Composable
 private fun TransactionCard(item: JsonObject, privacy: Boolean, onClick: () -> Unit, onDelete: () -> Unit) {
-    val income = item.string("type") == "income"
+    val income = com.fincip.nativeapp.data.isInflow(item)
     NeoCard {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             Box(Modifier.size(42.dp).background(if (income) Pop.Mint else Pop.Coral.copy(alpha = .28f), CircleShape), contentAlignment = Alignment.Center) { Text(if (income) "↙" else "↗", fontWeight = FontWeight.Black, color = Pop.Ink) }
@@ -343,7 +343,7 @@ fun RecurringScreen(workspace: JsonObject, privacy: Boolean, onAdd: () -> Unit, 
         run {
             val all = workspace.arrayOrEmpty("recurringRules").objects()
             val cur = workspace.objectOrEmpty("settings").string("baseCurrency", "INR")
-            val out = all.filter { it.string("type") != "income" }.sumOf { toBase(workspace, it.double("amount"), it.string("currency", "INR")) }
+            val out = all.filter { com.fincip.nativeapp.data.isSpend(it) }.sumOf { toBase(workspace, it.double("amount"), it.string("currency", "INR")) }
             val inn = all.filter { it.string("type") == "income" }.sumOf { toBase(workspace, it.double("amount"), it.string("currency", "INR")) }
             val nextRule = all.filter { it.string("nextDate").isNotBlank() }.minByOrNull { it.string("nextDate") }
             NeoCard(fill = Pop.Peach) {
@@ -422,7 +422,7 @@ fun CalendarScreen(workspace: JsonObject, month: String, onMonthChange: (String)
                             val dateStr = date.toString()
                             val dayTx = tx.filter { it.string("date") == dateStr }
                             val hasIncome = dayTx.any { it.string("type") == "income" }
-                            val hasExpense = dayTx.any { it.string("type") != "income" }
+                            val hasExpense = dayTx.any { com.fincip.nativeapp.data.isSpend(it) }
                             val hasBill = bills.any { it.string("nextDate") == dateStr }
                             val hasGoal = goals.any { it.string("deadline") == dateStr }
                             val isSelected = selected == date
@@ -581,7 +581,7 @@ fun BudgetsScreen(workspace: JsonObject, month: String, privacy: Boolean, onAdd:
         if (budgets.isEmpty()) NeoCard { Text("No budgets set yet", fontWeight = FontWeight.Black); Text("Add a category limit to see how you're doing.", style = MaterialTheme.typography.bodySmall) }
         budgets.forEach { b ->
             val budgetCurrency = b.string("currency", "INR")
-            val used = monthlyTransactions(workspace, month).filter { it.string("type") != "income" }.sumOf { tx ->
+            val used = monthlyTransactions(workspace, month).filter { com.fincip.nativeapp.data.isSpend(it) }.sumOf { tx ->
                 val txCurrency = tx.string("currency", "INR")
                 if (txCurrency != budgetCurrency) 0.0 else {
                     val splits = tx.arrayOrEmpty("splits").objects()
@@ -1058,7 +1058,7 @@ fun ForecastScreen(workspace: JsonObject, privacy: Boolean) {
     val balance = incomeTotal(workspace) - expenseTotal(workspace)
     val rules = workspace.arrayOrEmpty("recurringRules").objects()
     val recurringIncome = rules.filter { it.string("type") == "income" }.sumOf { toBase(workspace, it.double("amount"), it.string("currency", base)) }
-    val recurringExpenses = rules.filter { it.string("type") != "income" }.sumOf { toBase(workspace, it.double("amount"), it.string("currency", base)) }
+    val recurringExpenses = rules.filter { com.fincip.nativeapp.data.isSpend(it) }.sumOf { toBase(workspace, it.double("amount"), it.string("currency", base)) }
     val next = balance + recurringIncome - recurringExpenses
     PageColumn {
         PageHeading("LOOKING AHEAD", "Your next-month outlook.", "A simple projection from your recorded balance and recurring rules. One-time spending is not predicted.")
@@ -1077,7 +1077,7 @@ fun ForecastScreen(workspace: JsonObject, privacy: Boolean) {
 
 @Composable
 fun InsightsScreen(workspace: JsonObject, month: String, privacy: Boolean) {
-    val tx = monthlyTransactions(workspace, month).filter { it.string("type") != "income" }
+    val tx = monthlyTransactions(workspace, month).filter { com.fincip.nativeapp.data.isSpend(it) }
     val groups = tx.groupBy { it.string("category", "Other") }.mapValues { (_, v) -> v.sumOf { toBase(workspace, it.double("amount"), it.string("currency", "INR")) } }.toList().sortedByDescending { it.second }
     val base = workspace.objectOrEmpty("settings").string("baseCurrency", "INR")
     PageColumn {

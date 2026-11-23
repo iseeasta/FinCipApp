@@ -177,6 +177,7 @@ import java.io.InputStreamReader
 import java.time.LocalDate
 import java.time.YearMonth
 import java.time.format.DateTimeFormatter
+import androidx.compose.ui.graphics.toArgb
 import java.util.Locale
 import java.util.concurrent.TimeUnit
 import kotlin.math.max
@@ -185,35 +186,10 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        if (AppLock.noScreenshots(this)) window.addFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE)
+        applyPrivacyScreen(this, AppLock.privacyScreen(this))
         scheduleReminders()
         setContent { FinCipApp(FinanceStore(applicationContext), SecurePrefs(applicationContext)) }
     }
-
-    private fun blurNow() {
-        if (!AppLock.blockScreenshots(this)) return
-        PrivacyShield.covered = true
-        if (android.os.Build.VERSION.SDK_INT >= 31) {
-            window.decorView.setRenderEffect(android.graphics.RenderEffect.createBlurEffect(70f, 70f, android.graphics.Shader.TileMode.CLAMP))
-            window.decorView.invalidate()
-        }
-    }
-
-    // The leave hint arrives before onPause, so the blur has the best chance of being drawn before Android takes the preview.
-    override fun onUserLeaveHint() { super.onUserLeaveHint(); blurNow() }
-
-    private fun shield(on: Boolean) {
-        if (on && !AppLock.blockScreenshots(this)) return
-        PrivacyShield.covered = on
-        if (android.os.Build.VERSION.SDK_INT >= 31) {
-            window.decorView.setRenderEffect(if (on) android.graphics.RenderEffect.createBlurEffect(60f, 60f, android.graphics.Shader.TileMode.CLAMP) else null)
-        }
-    }
-
-    // Recents/Home press: cover as early as possible so the system snapshot already shows the blur.
-    override fun onUserLeaveHint() { super.onUserLeaveHint(); shield(true) }
-    override fun onPause() { super.onPause(); shield(true) }
-    override fun onResume() { super.onResume(); shield(false) }
 
     private fun scheduleReminders() {
         val work = PeriodicWorkRequestBuilder<ReminderWorker>(24, TimeUnit.HOURS).build()
@@ -245,11 +221,9 @@ private fun FinCipApp(store: FinanceStore, securePrefs: SecurePrefs) {
     var hapticOn by remember { mutableStateOf(context.getSharedPreferences("fincip_ui", 0).getBoolean("haptic", true)) }
     Feedback.sound = soundOn; Feedback.haptic = hapticOn
     var locked by remember { mutableStateOf(AppLock.lockEnabled(context)) }
-    val covered = PrivacyShield.covered
-    // Block screenshots uses FLAG_SECURE. "Blur in recent apps" is separate and draws a blurred cover instead.
-    fun applySecure(on: Boolean) { (context as? Activity)?.window?.let { w -> if (on) w.addFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE) else w.clearFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE) } }
+    fun applySecure(on: Boolean) { (context as? Activity)?.let { applyPrivacyScreen(it, on) } }
     androidx.compose.runtime.DisposableEffect(Unit) {
-        applySecure(AppLock.noScreenshots(context))
+        applySecure(AppLock.privacyScreen(context))
         var stoppedAt = 0L
         val owner = (context as? androidx.activity.ComponentActivity)
         val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
@@ -675,18 +649,31 @@ private fun FinCipApp(store: FinanceStore, securePrefs: SecurePrefs) {
             }
         }
     }
+    fun importLegacyText(content: String): Boolean {
+        val imported = parseStatement(content)
+        if (imported.isEmpty()) return false
+        val existingKeys = transactions(workspace).map(::transactionFingerprint).toSet()
+        val unique = imported.filter { transactionFingerprint(it) !in existingKeys }.distinctBy(::transactionFingerprint)
+        updateWorkspace { root -> val arr = root.arrayOrEmpty("transactions"); unique.forEach { arr.add(it) }; root.add("transactions", arr) }
+        notify("Imported ${unique.size} entries · skipped ${imported.size - unique.size} duplicates")
+        return true
+    }
+    fun importBatch(rows: List<JsonObject>, record: JsonObject): Boolean = try {
+        // All-or-nothing: updateWorkspace builds a copy, applies the change, and only then swaps it in and saves.
+        updateWorkspace { root ->
+            val arr = root.arrayOrEmpty("transactions"); rows.forEach { arr.add(it) }; root.add("transactions", arr)
+            val log = root.arrayOrEmpty("importBatches"); log.add(record); root.add("importBatches", log)
+        }
+        true
+    } catch (_: Throwable) { false }
+    fun undoBatch(id: String) = updateWorkspace { root ->
+        val kept = JsonArray(); root.arrayOrEmpty("transactions").forEach { el -> if (el.asObjectOrNull()?.string("importId") != id) kept.add(el) }
+        root.add("transactions", kept)
+    }
     val statementLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) scope.launch {
             val content = withContext(Dispatchers.IO) { context.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() } }
-            if (content != null) {
-                val imported = parseStatement(content)
-                if (imported.isNotEmpty()) {
-                    val existingKeys = transactions(workspace).map(::transactionFingerprint).toSet()
-                    val unique = imported.filter { transactionFingerprint(it) !in existingKeys }.distinctBy(::transactionFingerprint)
-                    updateWorkspace { root -> val arr = root.arrayOrEmpty("transactions"); unique.forEach { arr.add(it) }; root.add("transactions", arr) }
-                    notify("Imported ${unique.size} entries · skipped ${imported.size - unique.size} duplicates")
-                } else notify("No transactions found. Check the CSV or OFX file format.")
-            }
+            if (content != null && !importLegacyText(content)) notify("No transactions found. Check the CSV or OFX file format.")
         }
     }
     val exportJsonLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
@@ -737,6 +724,10 @@ private fun FinCipApp(store: FinanceStore, securePrefs: SecurePrefs) {
                 val controller = androidx.core.view.WindowCompat.getInsetsController(w, w.decorView)
                 controller.isAppearanceLightStatusBars = lightBars
                 controller.isAppearanceLightNavigationBars = lightBars
+            }
+            (context as? Activity)?.let { act ->
+                val bg = MaterialTheme.colorScheme.background.toArgb()
+                @Suppress("DEPRECATION") act.setTaskDescription(android.app.ActivityManager.TaskDescription("FinCip", null, bg))
             }
         }
         if (locked) {
@@ -798,7 +789,8 @@ private fun FinCipApp(store: FinanceStore, securePrefs: SecurePrefs) {
                     AnimatedContent(targetState = page, transitionSpec = { (fadeIn(tween(240, delayMillis = 70)) + slideInVertically(tween(280)) { it / 18 }) togetherWith fadeOut(tween(120)) }, label = "page") { currentPage ->
                     when (currentPage.substringBefore(":")) {
                         "overview" -> OverviewScreen(workspace, month, privacy, savingsRate, balance, onAdd = { openForm("transaction") }, onMascot = { page = "customize" }, onOpen = { id -> NAV_PAGES.firstOrNull { it.id == id }?.let { group = it.group; page = it.id } }, onNewGoal = { openForm("goal") }, onEditTx = { openForm("transaction", it) }, onWidgets = { ids -> updateWorkspace { root -> val st = root.objectOrEmpty("settings"); st.add("homeWidgets", com.google.gson.JsonArray().also { a -> ids.forEach { a.add(it) } }); root.add("settings", st) } })
-                        "transactions" -> TransactionsScreen(workspace, month, privacy, transactionQuery, { transactionQuery = it }, { openForm("transaction") }, { openForm("transaction", it) }, { deleteFromArray("transactions", it.string("id")) }, { statementLauncher.launch(arrayOf("text/*", "application/octet-stream")) }, { exportCsvLauncher.launch("FinCip-transactions.csv") })
+                        "dataio" -> com.fincip.nativeapp.ui.DataIOScreen(workspace, ::importBatch, ::undoBatch, { m -> month = m; page = "transactions" }, { pendingExport = workspace.toString(); exportJsonLauncher.launch("FinCip-backup.json") }, ::importLegacyText, ::notify)
+                        "transactions" -> TransactionsScreen(workspace, month, privacy, transactionQuery, { transactionQuery = it }, { openForm("transaction") }, { openForm("transaction", it) }, { deleteFromArray("transactions", it.string("id")) }, { page = "dataio" }, { page = "dataio" })
                         "recurring" -> RecurringScreen(workspace, privacy, { openForm("bill") }, { deleteFromArray("recurringRules", it.string("id")) }, { markRecurringPaid(it) })
                         "calendar" -> CalendarScreen(workspace, month, { month = it })
                         "subscriptions" -> SubscriptionsScreen(workspace, privacy, { openForm("bill") })
@@ -966,7 +958,6 @@ private fun FinCipApp(store: FinanceStore, securePrefs: SecurePrefs) {
               )
             }
         }
-        if (PrivacyShield.covered) PrivacyCover()
     }
 
     if (editingProfile) {
@@ -1075,24 +1066,14 @@ private fun transactionFingerprint(t: JsonObject): String = listOf(
     t.string("currency", "INR").uppercase(Locale.ROOT), t.string("title").trim().lowercase(Locale.ROOT)
 ).joinToString("|")
 
-object PrivacyShield { var covered by mutableStateOf(false) }
-
-/** Shared between the activity (which sees the user leaving first) and the Compose cover. */
-object PrivacyShield { var covered by mutableStateOf(false) }
-
-@Composable
-private fun PrivacyCover() {
-    val scheme = MaterialTheme.colorScheme
-    val soft = Build.VERSION.SDK_INT >= 31
-    Box(
-        Modifier.fillMaxSize().background(androidx.compose.ui.graphics.Brush.linearGradient(listOf(scheme.primary.copy(alpha = if (soft) .5f else 1f), scheme.tertiary.copy(alpha = if (soft) .4f else 1f), scheme.background.copy(alpha = if (soft) .55f else 1f)))),
-        contentAlignment = Alignment.Center
-    ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            FinCipMark(size = 88.dp)
-            Text("FinCip", fontWeight = FontWeight.Black, fontSize = 30.sp, color = scheme.onBackground)
-        }
-    }
+/**
+ * Privacy screen. Android snapshots the app for Recents before app code can draw anything, so a live blur is not possible.
+ * What the system does support: FLAG_SECURE (no screenshots/recording, preview hidden), and on Android 13+ an opt-out of the recents screenshot.
+ */
+fun applyPrivacyScreen(activity: Activity, on: Boolean) {
+    val w = activity.window
+    if (on) w.addFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE) else w.clearFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE)
+    if (Build.VERSION.SDK_INT >= 33) runCatching { activity.setRecentsScreenshotEnabled(!on) }
 }
 
 @Composable
