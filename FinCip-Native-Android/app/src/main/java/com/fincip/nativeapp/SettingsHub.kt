@@ -28,6 +28,7 @@ import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.CurrencyExchange
 import androidx.compose.material.icons.filled.Dashboard
 import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Lock
@@ -94,7 +95,7 @@ fun SettingsTab(
     val tap = rememberTap()
     val ctx = androidx.compose.ui.platform.LocalContext.current
     val settings = workspace.objectOrEmpty("settings")
-    val titles = mapOf("theme" to "Theme & vibe", "currency" to "Currency", "dashboard" to "Home layout", "sound" to "Sound & touch", "privacy" to "Privacy defaults", "data" to "Reports & exports", "about" to "About FinCip")
+    val titles = mapOf("theme" to "Theme & vibe", "currency" to "Currency", "dashboard" to "Home layout", "sound" to "Sound & touch", "privacy" to "Privacy defaults", "data" to "Reports & exports", "about" to "About FinCip", "support" to "Support the developer")
     AnimatedContent(
         targetState = page,
         transitionSpec = {
@@ -128,7 +129,10 @@ fun SettingsTab(
                     SettingRow(Icons.Default.CloudUpload, "Backup & restore", last = true, onClick = onGoSecurity)
                 }
                 GroupLabel("Support")
-                NeoCard { SettingRow(Icons.Default.Info, "About FinCip", "v1.0", last = true) { page = "about" } }
+                NeoCard {
+                    SettingRow(Icons.Default.Favorite, "Support the developer", "Voluntary · UPI") { page = "support" }
+                    SettingRow(Icons.Default.Info, "About FinCip", "v1.0", last = true) { page = "about" }
+                }
             } else {
                 Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).clickable { tap(); page = null }.padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text("‹", fontSize = 30.sp, modifier = Modifier.padding(end = 10.dp))
@@ -136,12 +140,15 @@ fun SettingsTab(
                 }
                 when (current) {
                     "theme" -> ThemePage(vibe, onVibe, dark, onDark, accent)
-                    "about" -> NeoCard {
+                    "support" -> com.fincip.nativeapp.ui.SupportCard()
+                    "about" -> Column(verticalArrangement = Arrangement.spacedBy(14.dp)) { NeoCard {
                         Text("FinCip", fontWeight = FontWeight.Black, style = MaterialTheme.typography.titleLarge)
                         Spacer(Modifier.height(6.dp))
                         Text("A local-first money companion. Your transactions, goals and profile stay on this device, encrypted, unless you choose to sync to your own Supabase project.", style = MaterialTheme.typography.bodyMedium)
                         Spacer(Modifier.height(8.dp))
                         Text("Version 1.0.0", style = MaterialTheme.typography.labelMedium)
+                    }
+                        com.fincip.nativeapp.ui.SupportCard()
                     }
                     else -> content(current)
                 }

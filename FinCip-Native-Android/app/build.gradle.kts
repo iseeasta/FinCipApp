@@ -14,9 +14,14 @@ android {
         versionCode = 1
         versionName = "1.0.0"
         vectorDrawables.useSupportLibrary = true
+        // Support-the-developer payment details. NOT stored in the repo: supply them as environment variables
+        // (GitHub Actions secrets SUPPORT_UPI_ID / SUPPORT_PAYEE_NAME) or as gradle properties. Empty = feature shows "not set up".
+        fun cfg(name: String) = (System.getenv(name) ?: (project.findProperty(name) as String?) ?: "").trim().replace("\\", "").replace("\"", "")
+        buildConfigField("String", "SUPPORT_UPI_ID", "\"" + cfg("SUPPORT_UPI_ID") + "\"")
+        buildConfigField("String", "SUPPORT_PAYEE_NAME", "\"" + cfg("SUPPORT_PAYEE_NAME") + "\"")
     }
 
-    buildFeatures { compose = true }
+    buildFeatures { compose = true; buildConfig = true }
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
@@ -50,6 +55,7 @@ dependencies {
 
     implementation("androidx.work:work-runtime-ktx:2.12.0")
     implementation("com.google.code.gson:gson:2.13.2")
+    implementation("com.google.zxing:core:3.5.3")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")

@@ -43,6 +43,9 @@ jobs:
 
       - name: Build APK
         working-directory: FinCip-Native-Android
+        env:
+          SUPPORT_UPI_ID: ${{ secrets.SUPPORT_UPI_ID }}
+          SUPPORT_PAYEE_NAME: ${{ secrets.SUPPORT_PAYEE_NAME }}
         run: |
           chmod +x ./gradlew
           ./gradlew --no-daemon assembleDebug
