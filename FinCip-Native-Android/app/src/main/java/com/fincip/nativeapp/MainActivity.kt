@@ -410,6 +410,10 @@ private fun FinCipApp(store: FinanceStore, securePrefs: SecurePrefs) {
             formContribution = existing?.double("monthlyContribution")?.toString() ?: ""
             formRate = existing?.double("rate")?.toString() ?: (com.fincip.nativeapp.data.IndiaKinds.of("SIP").defaultRate?.toString() ?: "")
         }
+        if (type == "asset") {
+            formCategory = existing?.string("type", "Asset") ?: "Asset"
+            formPerson = existing?.string("group").orEmpty()
+        }
         if (type == "emergency") {
             formName = "Emergency fund"
             formAmount = existing?.double("balance")?.toString() ?: "0"
@@ -512,7 +516,7 @@ private fun FinCipApp(store: FinanceStore, securePrefs: SecurePrefs) {
             }
             "asset" -> {
                 if (formName.isBlank() || amount <= 0) return
-                item.addProperty("name", formName); item.addProperty("value", amount); item.addProperty("type", formCategory)
+                item.addProperty("name", formName); item.addProperty("value", amount); item.addProperty("type", formCategory); item.addProperty("group", formPerson)
                 addToArray("netWorthItems", item, editId); notify("Net worth item saved")
             }
             "product" -> {
@@ -809,7 +813,7 @@ private fun FinCipApp(store: FinanceStore, securePrefs: SecurePrefs) {
                             pendingExport = pack.toString(); exportJsonLauncher.launch("fincip-shared-budget-${isoToday()}.json")
                         }, { backupImportLauncher.launch(arrayOf("application/json", "text/*")) })
                         "goals" -> GoalsScreen(workspace, privacy, { openForm("goal") }, { goal -> activeGoalId = goal.string("id"); openForm("contribution"); formName = goal.string("name") }, { deleteFromArray("goals", it.string("id")) }, { openForm("emergency", workspace.objectOrEmpty("emergencyFund")) })
-                        "networth" -> NetWorthScreen(workspace, privacy, { openForm("asset") }, { deleteFromArray("netWorthItems", it.string("id")) })
+                        "networth" -> NetWorthScreen(workspace, privacy, { openForm("asset") }, { deleteFromArray("netWorthItems", it.string("id")) }, { openForm("asset", it) })
                         "simulator" -> SimulatorScreen(workspace)
                         "india" -> IndiaFinanceScreen(workspace, privacy, { openForm("product") }, { deleteFromArray("financeProducts", it.string("id")) }, { product -> activeProductId = product.string("id"); openForm("productContribution", product) }, { product -> openForm("product", product) })
                         "tax" -> TaxScreen(
@@ -907,7 +911,8 @@ private fun FinCipApp(store: FinanceStore, securePrefs: SecurePrefs) {
                                 sharedBusy = true; scope.launch {
                                     runCatching { withContext(Dispatchers.IO) { SupabaseApi(cloudUrl, cloudAnon).addSharedBudget(session.toSession(), session.string("householdId"), sharedBudgetCategory, sharedBudgetLimit.toDouble(), sharedBudgetCurrency) } }.onSuccess { notify("Shared budget saved"); sharedBudgetList = withContext(Dispatchers.IO) { SupabaseApi(cloudUrl, cloudAnon).sharedBudgets(session.toSession(), session.string("householdId")) } }.onFailure { notify(it.message ?: "Shared budget failed") }; sharedBusy = false
                                 }
-                            }, onSignOut = { securePrefs.clearSession(); session = securePrefs.readSupabase(); notify("Signed out") }
+                            }, onSignOut = { securePrefs.clearSession(); session = securePrefs.readSupabase(); notify("Signed out") },
+                            workspace = workspace
                         )
 "profile", "settings", "security", "customize" -> ProfileHub(
                             workspace, initialTab = when (currentPage.substringBefore(":")) { "settings" -> 1; "security" -> 2; "customize" -> 3; else -> 0 },
@@ -1176,6 +1181,11 @@ private fun FinanceEntryDialog(
                     if (hasAmount) PopChipPicker("Currency", CURRENCY_INFO.map { it.code }, currency, onCurrency)
 
                     if (type == "transaction") com.fincip.nativeapp.ui.TransactionFormBody(transactionType == "income", name, onName, category, onCategory, date, onDate, account, onAccount, person, onPerson, project, onProject, tags, onTags, extra, onExtra, suggestions)
+                    if (type == "asset") {
+                        val pool = if (category.equals("Liability", true)) com.fincip.nativeapp.data.NetWorthGroups.liabilities else com.fincip.nativeapp.data.NetWorthGroups.assets
+                        PopChipPicker("Group", pool.map { "${com.fincip.nativeapp.data.NetWorthGroups.icon(it)} $it" }, pool.firstOrNull { it == person }?.let { "${com.fincip.nativeapp.data.NetWorthGroups.icon(it)} $it" } ?: "") { picked -> onPerson(picked.substringAfter(' ')) }
+                        Text("Skip it and FinCip guesses the group from the name.", style = MaterialTheme.typography.bodySmall)
+                    }
                     if (type == "product") com.fincip.nativeapp.ui.ProductFormBody(
                         kind = category, onKind = { k ->
                             val prev = com.fincip.nativeapp.data.IndiaKinds.of(category)

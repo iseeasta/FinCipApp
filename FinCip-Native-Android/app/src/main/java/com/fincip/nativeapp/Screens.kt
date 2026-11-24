@@ -1,5 +1,6 @@
 package com.fincip.nativeapp
 
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import com.fincip.nativeapp.data.currentMonth
@@ -499,6 +500,27 @@ private fun Dot(color: Color) { Box(Modifier.size(7.dp).clip(RoundedCornerShape(
 private fun LegendDot(color: Color, label: String) { Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) { Dot(color); Text(label, style = MaterialTheme.typography.labelSmall) } }
 
 @Composable
+private fun CurrencyPill(code: String, onPick: (String) -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    val info = CURRENCY_INFO.firstOrNull { it.code == code }
+    Box {
+        Row(
+            Modifier.clip(RoundedCornerShape(50)).background(Color.White.copy(alpha = .85f)).clickable { open = true }.padding(start = 12.dp, end = 14.dp, top = 9.dp, bottom = 9.dp),
+            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Text(info?.flag ?: "", fontSize = 20.sp)
+            Text(code, fontWeight = FontWeight.Black, color = Pop.Ink, maxLines = 1, softWrap = false)
+            Text("▾", color = Pop.Ink.copy(alpha = .6f))
+        }
+        androidx.compose.material3.DropdownMenu(open, { open = false }) {
+            CURRENCY_INFO.forEach { c ->
+                androidx.compose.material3.DropdownMenuItem(text = { Text("${c.flag}  ${c.code}  ·  ${c.country}") }, onClick = { open = false; onPick(c.code) })
+            }
+        }
+    }
+}
+
+@Composable
 fun CurrencyScreen(workspace: JsonObject, applyChange: ((JsonObject) -> Unit) -> Unit, onRefreshRates: () -> Unit, refreshing: Boolean) {
     var amount by remember { mutableStateOf("1") }
     var from by remember { mutableStateOf("INR") }
@@ -509,42 +531,73 @@ fun CurrencyScreen(workspace: JsonObject, applyChange: ((JsonObject) -> Unit) ->
     val fromRate = if (from == "INR") 1.0 else rates.double(from)
     val toRate = if (to == "INR") 1.0 else rates.double(to)
     val converted = if (fromRate > 0 && toRate > 0) (amount.toDoubleOrNull() ?: 0.0) * fromRate / toRate else null
+    val scheme = MaterialTheme.colorScheme
     PageColumn {
-        PageHeading("GLOBAL MONEY", "Convert across borders.", "Ten currencies supported. Rates are editable reference assumptions, not live quotes.")
-        NeoCard {
-            Text("AMOUNT", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Black)
-            PopField(value = amount, onValueChange = { amount = it }, modifier = Modifier.fillMaxWidth(), label = { Text("Amount") })
-            Selector("From", from, CURRENCY_INFO.map { "${it.flag} ${it.code}" }, { from = it.takeLast(3) })
-            OutlinedButton(onClick = { val temp = from; from = to; to = temp }, modifier = Modifier.fillMaxWidth()) { Text("⇅  Swap currencies") }
-            Selector("To", to, CURRENCY_INFO.map { "${it.flag} ${it.code}" }, { to = it.takeLast(3) })
-            Divider(Modifier.padding(vertical = 7.dp))
-            Text("RESULT", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Black)
-            Text(if (converted == null) "Set both rates in Settings" else money(converted, to), style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Black)
-            Text(if (converted == null) "A conversion rate is missing." else "1 $from = ${"%.6f".format(fromRate / toRate)} $to", style = MaterialTheme.typography.bodySmall)
+        PageHeading("GLOBAL MONEY", "Convert across borders.", "${CURRENCY_INFO.size} currencies supported. Rates are reference values, not live quotes, and you can edit any of them.")
+        NeoCard(fill = Pop.Mint) {
+            Text("YOU CONVERT", style = MaterialTheme.typography.labelSmall, letterSpacing = 1.2.sp, fontWeight = FontWeight.Black, color = Pop.Ink.copy(alpha = .6f))
+            Spacer(Modifier.height(8.dp))
+            Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(Color.White.copy(alpha = .55f)).padding(start = 16.dp, end = 10.dp, top = 12.dp, bottom = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                androidx.compose.foundation.text.BasicTextField(
+                    value = amount, onValueChange = { amount = it.filter { c -> c.isDigit() || c == '.' }.take(14) }, singleLine = true,
+                    textStyle = androidx.compose.ui.text.TextStyle(fontSize = 32.sp, fontWeight = FontWeight.Black, color = Pop.Ink, fontFamily = com.fincip.nativeapp.ui.PopFont),
+                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Decimal),
+                    cursorBrush = androidx.compose.ui.graphics.SolidColor(Pop.Ink), modifier = Modifier.weight(1f)
+                )
+                CurrencyPill(from) { from = it }
+            }
+            Box(Modifier.fillMaxWidth().padding(vertical = 6.dp), contentAlignment = Alignment.Center) {
+                Box(Modifier.size(40.dp).clip(CircleShape).background(Pop.Ink).clickable { val t = from; from = to; to = t }, contentAlignment = Alignment.Center) { Text("⇅", color = Color.White, fontWeight = FontWeight.Black, fontSize = 18.sp) }
+            }
+            Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(Color.White.copy(alpha = .85f)).padding(start = 16.dp, end = 10.dp, top = 12.dp, bottom = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text(if (converted == null) "—" else money(converted, to), fontSize = 28.sp, fontWeight = FontWeight.Black, color = Pop.Ink, maxLines = 1)
+                    Text(if (converted == null) "A rate is missing. Add it below." else "1 $from = ${"%.6f".format(Locale.ENGLISH, fromRate / toRate)} $to", style = MaterialTheme.typography.bodySmall, color = Pop.Ink.copy(alpha = .7f))
+                }
+                CurrencyPill(to) { to = it }
+            }
+            Spacer(Modifier.height(10.dp))
+            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                listOf("1", "10", "100", "1000", "10000", "100000").forEach { q -> PopChip(q, amount == q, { amount = q }) }
+            }
         }
         NeoCard {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text("Reference rates · INR for 1 unit of currency", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Black)
-                    Text(settings.string("fxRateSource", "Manual assumptions") + settings.string("fxUpdatedAt").takeIf { it.isNotBlank() }?.let { " · $it" }.orEmpty(), style = MaterialTheme.typography.bodySmall)
-                }
-                NeoOutlineButton(if (refreshing) "Refreshing…" else "Refresh rates", onRefreshRates, Modifier.width(126.dp))
-            }
+            Text("Reference rates", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Black)
+            Text("INR for 1 unit  ·  " + settings.string("fxRateSource", "Manual assumptions") + settings.string("fxUpdatedAt").takeIf { it.isNotBlank() }?.let { "  ·  $it" }.orEmpty(), style = MaterialTheme.typography.bodySmall, color = scheme.onSurface.copy(alpha = .65f))
+            Spacer(Modifier.height(10.dp))
+            NeoOutlineButton(if (refreshing) "Refreshing…" else "↻  Refresh rates", onRefreshRates, Modifier.fillMaxWidth())
+            Spacer(Modifier.height(8.dp))
             CURRENCY_INFO.forEach { info ->
                 val rate = rates.double(info.code, if (info.code == "INR") 1.0 else 0.0)
-                var text by remember(info.code, rate) { mutableStateOf(if (rate > 0) rate.toString() else "") }
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Column(Modifier.weight(1f)) { Text("${info.flag} ${info.code}", fontWeight = FontWeight.Bold); Text(info.country, style = MaterialTheme.typography.labelSmall) }
-                    PopField(value = text, onValueChange = { text = it }, modifier = Modifier.width(140.dp), singleLine = true, label = { Text("INR for 1 unit") }, enabled = info.code != "INR")
-                    TextButtonTiny("Save") {
-                        val v = text.toDoubleOrNull() ?: return@TextButtonTiny
-                        applyChange(fun(root: JsonObject) { val s = root.objectOrEmpty("settings"); val fx = s.objectOrEmpty("fxRates"); fx.addProperty(info.code, if (info.code == "INR") 1.0 else v); s.add("fxRates", fx); root.add("settings", s) })
+                val shownRate = if (rate > 0) "%.4f".format(Locale.ENGLISH, rate) else ""
+                var text by remember(info.code, rate) { mutableStateOf(shownRate) }
+                val parsed = text.toDoubleOrNull()
+                val changed = info.code != "INR" && text != shownRate && parsed != null && parsed > 0
+                Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Box(Modifier.size(42.dp).clip(CircleShape).background(scheme.surfaceVariant), contentAlignment = Alignment.Center) { Text(info.flag, fontSize = 22.sp) }
+                    Column(Modifier.weight(1f)) {
+                        Text(info.code, fontWeight = FontWeight.Black)
+                        Text(info.country, style = MaterialTheme.typography.labelSmall, color = scheme.onSurface.copy(alpha = .6f), maxLines = 1)
+                    }
+                    if (info.code == "INR") {
+                        Text("Base", Modifier.clip(RoundedCornerShape(50)).background(scheme.surfaceVariant).padding(horizontal = 14.dp, vertical = 8.dp), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelMedium)
+                    } else {
+                        androidx.compose.material3.OutlinedTextField(
+                            value = text, onValueChange = { text = it.filter { c -> c.isDigit() || c == '.' }.take(12) }, singleLine = true,
+                            prefix = { Text("₹") }, modifier = Modifier.width(124.dp), shape = RoundedCornerShape(16.dp),
+                            textStyle = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                            keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Decimal)
+                        )
+                        Box(Modifier.width(58.dp), contentAlignment = Alignment.Center) {
+                            if (changed) Text("Save", Modifier.clip(RoundedCornerShape(50)).background(scheme.primary).clickable {
+                                val v = parsed ?: return@clickable
+                                applyChange(fun(root: JsonObject) { val st = root.objectOrEmpty("settings"); val fx = st.objectOrEmpty("fxRates"); fx.addProperty(info.code, v); st.add("fxRates", fx); root.add("settings", st) })
+                            }.padding(horizontal = 14.dp, vertical = 8.dp), color = scheme.onPrimary, fontWeight = FontWeight.Black, style = MaterialTheme.typography.labelMedium, maxLines = 1, softWrap = false)
+                        }
                     }
                 }
-                Divider(Modifier.padding(vertical = 5.dp))
             }
-            Text("Dashboard base currency: $base", style = MaterialTheme.typography.bodySmall)
-            Text("Frankfurter publishes reference rates, not live trading or settlement quotes. You can still edit any rate manually.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .65f))
+            Text("Dashboard base currency: $base. Frankfurter publishes reference rates, not live trading or settlement quotes.", style = MaterialTheme.typography.labelSmall, color = scheme.onSurface.copy(alpha = .6f), modifier = Modifier.padding(top = 6.dp))
         }
     }
 }
@@ -692,27 +745,140 @@ private fun estimateDebtMonths(goals: List<JsonObject>, strategy: String, extra:
 }
 
 @Composable
-fun NetWorthScreen(workspace: JsonObject, privacy: Boolean, onAdd: () -> Unit, onDelete: (JsonObject) -> Unit) {
+fun NetWorthScreen(workspace: JsonObject, privacy: Boolean, onAdd: () -> Unit, onDelete: (JsonObject) -> Unit, onEdit: (JsonObject) -> Unit = {}) {
     val items = workspace.arrayOrEmpty("netWorthItems").objects()
-    val assets = items.filter { it.string("type", "Asset").equals("Asset", true) }.sumOf { toBase(workspace, it.double("value", it.double("amount")), it.string("currency", "INR")) }
-    val liabilities = items.filter { it.string("type").equals("Liability", true) }.sumOf { toBase(workspace, it.double("value", it.double("amount")), it.string("currency", "INR")) }
     val base = workspace.objectOrEmpty("settings").string("baseCurrency", "INR")
+    val scheme = MaterialTheme.colorScheme
+    fun isLiab(it: JsonObject) = it.string("type").equals("Liability", true)
+    fun amt(it: JsonObject) = toBase(workspace, it.double("value", it.double("amount")), it.string("currency", "INR"))
+    fun grp(it: JsonObject) = com.fincip.nativeapp.data.NetWorthGroups.groupOf(it.string("name"), it.string("type", "Asset"), it.string("group"))
+    val assetItems = items.filter { !isLiab(it) }
+    val debtItems = items.filter { isLiab(it) }
+    val assets = assetItems.sumOf { amt(it) }
+    val liabilities = debtItems.sumOf { amt(it) }
+    val net = assets - liabilities
+    val ratio = com.fincip.nativeapp.data.NetWorthGroups.debtRatio(assets, liabilities)
+    val band = com.fincip.nativeapp.data.NetWorthGroups.band(ratio, liabilities)
+    fun hide(text: String) = if (privacy) "••••" else text
+    val assetGroups = assetItems.groupBy { grp(it) }.map { (g, v) -> g to v.sumOf { amt(it) } }.sortedByDescending { it.second }
+    val debtGroups = debtItems.groupBy { grp(it) }.map { (g, v) -> g to v.sumOf { amt(it) } }.sortedByDescending { it.second }
+
     PageColumn {
-        PageHeading("THE WHOLE PICTURE", "Know what you own.", "Track cash, investments, gold, property, loans and other liabilities.")
-        if (assets + liabilities > 0) NeoCard {
-            CardLabel("Assets vs liabilities")
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                DonutChart(listOf(Pop.Teal to assets, Pop.Coral to liabilities), centerTop = if (privacy) "••••" else compactMoney(assets - liabilities, base), centerBottom = "net worth", diameter = 132.dp)
-                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    LegendRow(Pop.Teal, "Assets", if (privacy) "••" else compactMoney(assets, base))
-                    LegendRow(Pop.Coral, "Liabilities", if (privacy) "••" else compactMoney(liabilities, base))
+        PageHeading("THE WHOLE PICTURE", "Know what you own.", "Everything you own, minus everything you owe, in one picture.")
+
+        // ---- Hero
+        Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(30.dp)).background(Brush.linearGradient(listOf(Pop.Forest, Color(0xFF14463A), Pop.Ink)))) {
+            Canvas(Modifier.matchParentSize()) {
+                drawCircle(Pop.Lime.copy(alpha = .13f), 110.dp.toPx(), Offset(size.width - 20.dp.toPx(), 10.dp.toPx()))
+                drawCircle(Color.White.copy(alpha = .06f), 80.dp.toPx(), Offset(10.dp.toPx(), size.height))
+            }
+            Column(Modifier.padding(22.dp)) {
+                Text("NET WORTH", style = MaterialTheme.typography.labelSmall, letterSpacing = 2.sp, fontWeight = FontWeight.Black, color = Color.White.copy(alpha = .7f))
+                Spacer(Modifier.height(6.dp))
+                val valueText = hide(money(net, base))
+                val numSize = when { valueText.length <= 9 -> 44.sp; valueText.length <= 13 -> 36.sp; else -> 28.sp }
+                Text(valueText, fontSize = numSize, lineHeight = numSize, fontWeight = FontWeight.Black, letterSpacing = (-1).sp, color = if (net < 0) Color(0xFFFFB4AB) else Color.White, maxLines = 1, softWrap = false)
+                Spacer(Modifier.height(14.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Column(Modifier.weight(1f).clip(RoundedCornerShape(18.dp)).background(Color.White.copy(alpha = .12f)).padding(12.dp)) {
+                        Text("▲ ASSETS", fontSize = 10.sp, letterSpacing = 1.2.sp, fontWeight = FontWeight.Black, color = Pop.Lime)
+                        Text(hide(compactMoney(assets, base)), fontSize = 20.sp, fontWeight = FontWeight.Black, color = Color.White, maxLines = 1)
+                    }
+                    Column(Modifier.weight(1f).clip(RoundedCornerShape(18.dp)).background(Color.White.copy(alpha = .12f)).padding(12.dp)) {
+                        Text("▼ LIABILITIES", fontSize = 10.sp, letterSpacing = 1.2.sp, fontWeight = FontWeight.Black, color = Color(0xFFFFB4AB))
+                        Text(hide(compactMoney(liabilities, base)), fontSize = 20.sp, fontWeight = FontWeight.Black, color = Color.White, maxLines = 1)
+                    }
+                }
+                if (assets + liabilities > 0) {
+                    Spacer(Modifier.height(14.dp))
+                    Row(Modifier.fillMaxWidth().height(12.dp).clip(RoundedCornerShape(50))) {
+                        Box(Modifier.fillMaxHeight().weight((assets / (assets + liabilities)).toFloat().coerceAtLeast(0.02f)).background(Pop.Lime))
+                        Box(Modifier.fillMaxHeight().weight((liabilities / (assets + liabilities)).toFloat().coerceAtLeast(0.02f)).background(Color(0xFFE0614F)))
+                    }
                 }
             }
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { Box(Modifier.weight(1f)) { MetricTile("Assets", if (privacy) "••••" else money(assets, base)) }; Box(Modifier.weight(1f)) { MetricTile("Liabilities", if (privacy) "••••" else money(liabilities, base)) } }
-        MetricTile("Net worth", if (privacy) "••••" else money(assets - liabilities, base), "Assets minus liabilities")
-        NeoButton("+ Add asset or liability", onClick = onAdd)
-        items.forEach { item -> NeoCard { Row(verticalAlignment = Alignment.CenterVertically) { Column(Modifier.weight(1f)) { Text(item.string("name", "Item"), fontWeight = FontWeight.Black); Text(item.string("type", "Asset"), style = MaterialTheme.typography.bodySmall) }; Text(if (privacy) "••••" else money(item.double("value", item.double("amount")), item.string("currency", "INR")), fontWeight = FontWeight.Black); Text("×", modifier = Modifier.clickable { onDelete(item) }.padding(8.dp)) } } }
+        NeoButton("+  Add asset or liability", modifier = Modifier.fillMaxWidth(), onClick = onAdd)
+
+        if (items.isEmpty()) {
+            NeoCard {
+                Text("🏦  🏠  📈  🪙", fontSize = 34.sp)
+                Spacer(Modifier.height(8.dp))
+                Text("NOTHING ADDED YET.", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Black)
+                Text("Add your savings, investments, gold, property and any loans. FinCip splits them into groups and shows how healthy the balance is. Everything stays on this device.", style = MaterialTheme.typography.bodySmall, color = scheme.onSurface.copy(alpha = .7f), modifier = Modifier.padding(top = 4.dp))
+            }
+        } else {
+            // ---- Health gauge
+            NeoCard(fill = Pop.Sun.copy(alpha = .4f)) {
+                CardLabel("Balance health")
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                    RingGauge((ratio ?: 0.0).toFloat().div(100f).coerceIn(0f, 1f), if ((ratio ?: 0.0) > 60) Pop.Coral else Pop.Teal, if (ratio == null) "—" else if (privacy) "••" else "${ratio.toInt()}%", diameter = 104.dp, caption = "debt / assets")
+                    Column(Modifier.weight(1f)) {
+                        Text(band, fontSize = 22.sp, fontWeight = FontWeight.Black)
+                        Text(
+                            when {
+                                liabilities <= 0 -> "You have no liabilities recorded."
+                                net < 0 -> "Your debts are larger than your assets right now."
+                                else -> "For every ₹100 you own, you owe about ₹${(ratio ?: 0.0).toInt()}."
+                            },
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                }
+                Text("A rough rule of thumb from the values you entered, not financial advice.", style = MaterialTheme.typography.labelSmall, color = scheme.onSurface.copy(alpha = .55f), modifier = Modifier.padding(top = 6.dp))
+            }
+
+            // ---- Where your assets sit
+            if (assetGroups.isNotEmpty() && assets > 0) {
+                NeoCard {
+                    CardLabel("Where your money sits")
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                        DonutChart(assetGroups.mapIndexed { i, (_, v) -> ChartColors[i % ChartColors.size] to v }, centerTop = hide(compactMoney(assets, base)), centerBottom = "assets", diameter = 132.dp)
+                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            assetGroups.take(6).forEachIndexed { i, (g, v) -> LegendRow(ChartColors[i % ChartColors.size], "${com.fincip.nativeapp.data.NetWorthGroups.icon(g)} $g", if (privacy) "••" else "${(v / assets * 100).toInt()}%") }
+                        }
+                    }
+                }
+            }
+            // ---- What you owe
+            if (debtGroups.isNotEmpty() && liabilities > 0) {
+                NeoCard {
+                    CardLabel("What you owe")
+                    debtGroups.forEach { (g, v) ->
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("${com.fincip.nativeapp.data.NetWorthGroups.icon(g)} $g", Modifier.weight(1f), fontWeight = FontWeight.Bold)
+                            Text(hide(money(v, base)), fontWeight = FontWeight.Black)
+                        }
+                        Box(Modifier.fillMaxWidth().padding(top = 4.dp, bottom = 10.dp).height(8.dp).clip(RoundedCornerShape(50)).background(scheme.surfaceVariant)) {
+                            Box(Modifier.fillMaxHeight().fillMaxWidth((v / liabilities).toFloat().coerceIn(0.03f, 1f)).background(Pop.Coral))
+                        }
+                    }
+                }
+            }
+
+            // ---- Itemised lists
+            listOf("ASSETS" to assetItems, "LIABILITIES" to debtItems).forEach { (title, list) ->
+                if (list.isNotEmpty()) {
+                    Text(title, style = MaterialTheme.typography.labelSmall, letterSpacing = 1.4.sp, fontWeight = FontWeight.Black, color = scheme.onBackground.copy(alpha = .6f))
+                    list.sortedByDescending { amt(it) }.forEach { item ->
+                        val g = grp(item)
+                        val liab = isLiab(item)
+                        NeoCard(modifier = Modifier.clickable { onEdit(item) }) {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                Box(Modifier.size(46.dp).clip(CircleShape).background(if (liab) Color(0xFFF9C6D0) else Pop.Mint), contentAlignment = Alignment.Center) { Text(com.fincip.nativeapp.data.NetWorthGroups.icon(g), fontSize = 22.sp) }
+                                Column(Modifier.weight(1f)) {
+                                    Text(item.string("name", "Item"), fontWeight = FontWeight.Black, maxLines = 1)
+                                    Text(g, style = MaterialTheme.typography.bodySmall, color = scheme.onSurface.copy(alpha = .65f))
+                                }
+                                Text(hide((if (liab) "−" else "") + money(item.double("value", item.double("amount")), item.string("currency", "INR"))), fontWeight = FontWeight.Black, color = if (liab) LossDark else scheme.onSurface, maxLines = 1)
+                                Box(Modifier.size(32.dp).clip(CircleShape).background(scheme.surfaceVariant).clickable { onDelete(item) }, contentAlignment = Alignment.Center) { Text("×", fontWeight = FontWeight.Black) }
+                            }
+                        }
+                    }
+                }
+            }
+            Text("Tap any item to edit it. Values are what you enter, converted with your saved reference rates.", style = MaterialTheme.typography.labelSmall, color = scheme.onBackground.copy(alpha = .55f))
+        }
     }
 }
 
@@ -1261,49 +1427,165 @@ fun SettingsScreen(workspace: JsonObject, vibe: String, onVibe: (String) -> Unit
 }
 
 @Composable
+private fun SyncTile(icon: String, title: String, body: String, fill: Color, enabled: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    Column(
+        modifier.clip(RoundedCornerShape(24.dp)).background(fill).clickable(enabled = enabled, onClick = onClick).padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        Box(Modifier.size(44.dp).clip(CircleShape).background(Color.White.copy(alpha = .7f)), contentAlignment = Alignment.Center) { Text(icon, fontSize = 22.sp) }
+        Text(title, fontWeight = FontWeight.Black, fontSize = 17.sp, color = Pop.Ink)
+        Text(body, style = MaterialTheme.typography.bodySmall, color = Pop.Ink.copy(alpha = .75f))
+    }
+}
+
+@Composable
 fun HouseholdScreen(
     url: String, onUrl: (String) -> Unit, anon: String, onAnon: (String) -> Unit, email: String, onEmail: (String) -> Unit, password: String, onPassword: (String) -> Unit,
     session: JsonObject, sharedBudgets: String, category: String, onCategory: (String) -> Unit, limit: String, onLimit: (String) -> Unit, currency: String, onCurrency: (String) -> Unit,
     householdName: String, onHouseholdName: (String) -> Unit, inviteCode: String, onInviteCode: (String) -> Unit, busy: Boolean,
-    onSignIn: () -> Unit, onPush: () -> Unit, onPull: () -> Unit, onCreateHousehold: () -> Unit, onJoinHousehold: () -> Unit, onRefreshShared: () -> Unit, onAddSharedBudget: () -> Unit, onSignOut: () -> Unit
+    onSignIn: () -> Unit, onPush: () -> Unit, onPull: () -> Unit, onCreateHousehold: () -> Unit, onJoinHousehold: () -> Unit, onRefreshShared: () -> Unit, onAddSharedBudget: () -> Unit, onSignOut: () -> Unit,
+    workspace: JsonObject = JsonObject()
 ) {
+    val scheme = MaterialTheme.colorScheme
+    val connected = session.string("accessToken").isNotBlank()
+    val hid = session.string("householdId")
+    var tab by remember { mutableStateOf("household") }
+    var showConfig by remember { mutableStateOf(false) }
+    val base = workspace.objectOrEmpty("settings").string("baseCurrency", "INR")
+    val shared = remember(sharedBudgets) { runCatching { com.google.gson.JsonParser.parseString(sharedBudgets).asJsonArray.objects() }.getOrDefault(emptyList()) }
+    val monthSpend = remember(workspace) { monthlyTransactions(workspace, currentMonth()).filter { com.fincip.nativeapp.data.isSpend(it) } }
+    fun spentIn(cat: String) = monthSpend.filter { it.string("category").equals(cat, true) }.sumOf { toBase(workspace, it.double("amount"), it.string("currency", "INR")) }
+
     PageColumn {
-        PageHeading("OPTIONAL PRIVATE CLOUD", "Your household, together.", "Connect your own Supabase project for account sync and shared budget limits.")
-        NeoCard {
-            Text("Supabase configuration", fontWeight = FontWeight.Black)
-            Field("Project URL", url, onUrl, hint = "https://your-project.supabase.co")
-            Field("Public anon key", anon, onAnon)
-            Field("Email", email, onEmail)
-            Field("Password", password, onPassword)
-            NeoButton(if (busy) "Working…" else if (session.string("accessToken").isBlank()) "Sign in" else "Connected as ${session.string("userId").take(8)}…", onClick = onSignIn, enabled = !busy)
+        PageHeading("OPTIONAL PRIVATE CLOUD", "Your household, together.", "Connect your own Supabase project to sync this device and share budget limits.")
+        Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(50)).background(scheme.surfaceVariant).padding(4.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            listOf("household" to "🏡  Household", "sync" to "☁  Cloud sync").forEach { (k, label) ->
+                val on = tab == k
+                Box(Modifier.weight(1f).clip(RoundedCornerShape(50)).background(if (on) scheme.primary else Color.Transparent).clickable { tab = k }.padding(vertical = 12.dp), contentAlignment = Alignment.Center) {
+                    Text(label, fontWeight = FontWeight.Bold, color = if (on) scheme.onPrimary else scheme.onSurface, maxLines = 1)
+                }
+            }
         }
-        if (session.string("accessToken").isNotBlank()) {
-            NeoCard {
-                Text("Workspace sync", fontWeight = FontWeight.Black)
-                Text("Sync sends the full JSON workspace to your Supabase account. It is not end-to-end encrypted. Push replaces the current cloud snapshot; pull replaces this device's workspace.", style = MaterialTheme.typography.bodySmall)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { NeoOutlineButton("Push", onPush, Modifier.weight(1f)); NeoButton("Pull", onClick = onPull, modifier = Modifier.weight(1f)) }
-                Text("Sign out", modifier = Modifier.clickable(onClick = onSignOut).padding(6.dp), color = MaterialTheme.colorScheme.error)
+
+        if (tab == "household") {
+            // ---- Hero
+            NeoCard(fill = Pop.Mint) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                    Box(Modifier.size(64.dp).clip(RoundedCornerShape(20.dp)).background(Color.White.copy(alpha = .7f)), contentAlignment = Alignment.Center) { Text("🏡", fontSize = 36.sp) }
+                    Column(Modifier.weight(1f)) {
+                        Text("MY HOUSEHOLD", style = MaterialTheme.typography.labelSmall, letterSpacing = 1.4.sp, fontWeight = FontWeight.Black, color = Pop.Ink.copy(alpha = .6f))
+                        Text(if (hid.isNotBlank()) "Household joined" else if (connected) "No household yet" else "Not connected", fontSize = 22.sp, fontWeight = FontWeight.Black, color = Pop.Ink)
+                        Text(if (hid.isNotBlank()) "ID ${hid.take(8)}…" else if (connected) "Create one or join with an invite code." else "Connect on the Cloud sync tab first.", style = MaterialTheme.typography.bodySmall, color = Pop.Ink.copy(alpha = .7f))
+                    }
+                }
             }
-            NeoCard {
-                Text("Household", fontWeight = FontWeight.Black)
-                Text("Current household ID: ${session.string("householdId").ifBlank { "Not joined" }}", style = MaterialTheme.typography.bodySmall)
-                Field("New household name", householdName, onHouseholdName)
-                NeoButton("Create household", onClick = onCreateHousehold)
-                Field("Invite code", inviteCode, onInviteCode)
-                NeoOutlineButton("Join household", onJoinHousehold)
-            }
-            if (session.string("householdId").isNotBlank()) {
+            if (!connected) {
+                NeoButton("Go to Cloud sync", modifier = Modifier.fillMaxWidth(), onClick = { tab = "sync" })
                 NeoCard {
-                    Row(verticalAlignment = Alignment.CenterVertically) { Text("Shared budgets", Modifier.weight(1f), fontWeight = FontWeight.Black); Text("Refresh", color = MaterialTheme.colorScheme.primary, modifier = Modifier.clickable(onClick = onRefreshShared)) }
-                    Field("Category", category, onCategory)
+                    Text("How it works", fontWeight = FontWeight.Black)
+                    listOf("1" to "Connect your own Supabase project on the Cloud sync tab.", "2" to "Create a household and share the invite code.", "3" to "Everyone in it sees the same monthly category limits.").forEach { (n, t) ->
+                        Row(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Box(Modifier.size(28.dp).clip(CircleShape).background(scheme.primary), contentAlignment = Alignment.Center) { Text(n, color = scheme.onPrimary, fontWeight = FontWeight.Black, fontSize = 13.sp) }
+                            Text(t, style = MaterialTheme.typography.bodyMedium)
+                        }
+                    }
+                }
+            } else if (hid.isBlank()) {
+                NeoCard {
+                    CardLabel("Start a household")
+                    Field("Household name", householdName, onHouseholdName)
+                    Spacer(Modifier.height(10.dp))
+                    NeoButton(if (busy) "Working…" else "Create household", modifier = Modifier.fillMaxWidth(), onClick = onCreateHousehold, enabled = !busy)
+                }
+                NeoCard {
+                    CardLabel("Or join with a code")
+                    Field("Invite code", inviteCode, onInviteCode)
+                    Spacer(Modifier.height(10.dp))
+                    NeoOutlineButton("Join household", onJoinHousehold, Modifier.fillMaxWidth())
+                }
+            } else {
+                // ---- Shared budgets, visual
+                val totalLimit = shared.sumOf { toBase(workspace, it.double("monthly_limit"), it.string("currency", "INR")) }
+                val totalUsed = shared.sumOf { spentIn(it.string("category")) }
+                NeoCard {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            CardLabel("Shared budgets · this month")
+                            Text(money(totalUsed, base), fontSize = 30.sp, fontWeight = FontWeight.Black, maxLines = 1)
+                            Text(if (shared.isEmpty()) "No shared limits yet." else "of ${money(totalLimit, base)} shared limits · your spending only", style = MaterialTheme.typography.bodySmall, color = scheme.onSurface.copy(alpha = .65f))
+                        }
+                        Text(if (busy) "…" else "↻ Refresh", Modifier.clip(RoundedCornerShape(50)).background(scheme.surfaceVariant).clickable(enabled = !busy, onClick = onRefreshShared).padding(horizontal = 14.dp, vertical = 9.dp), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelMedium, maxLines = 1)
+                    }
+                    shared.forEach { b ->
+                        val cat = b.string("category"); val lim = toBase(workspace, b.double("monthly_limit"), b.string("currency", "INR")); val used = spentIn(cat)
+                        val frac = if (lim > 0) (used / lim).toFloat() else 0f
+                        Spacer(Modifier.height(12.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            com.fincip.nativeapp.ui.CategoryBadge(cat, 40.dp)
+                            Column(Modifier.weight(1f)) {
+                                Row { Text(cat, Modifier.weight(1f), fontWeight = FontWeight.Black, maxLines = 1); Text("${compactMoney(used, base)} / ${compactMoney(lim, base)}", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold) }
+                                Spacer(Modifier.height(5.dp))
+                                Box(Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(50)).background(scheme.surfaceVariant)) {
+                                    Box(Modifier.fillMaxHeight().fillMaxWidth(frac.coerceIn(0.02f, 1f)).background(if (frac > 1f) Pop.Coral else if (frac > .8f) Pop.Sun else Pop.Teal))
+                                }
+                            }
+                        }
+                    }
+                }
+                NeoCard {
+                    CardLabel("Add a shared limit")
+                    com.fincip.nativeapp.ui.IconCategoryPicker(com.fincip.nativeapp.ui.EXPENSE_CATEGORIES, category, onCategory)
+                    Spacer(Modifier.height(12.dp))
                     Field("Monthly limit", limit, onLimit)
+                    Row(Modifier.horizontalScroll(rememberScrollState()).padding(vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        listOf("1000", "2000", "5000", "10000", "20000").forEach { PopChip(it, limit == it, { onLimit(it) }) }
+                    }
                     Selector("Currency", currency, CURRENCY_INFO.map { it.code }, onCurrency)
-                    NeoButton("Add shared budget", onClick = onAddSharedBudget)
-                    Text(sharedBudgets.take(1200), style = MaterialTheme.typography.bodySmall)
+                    Spacer(Modifier.height(10.dp))
+                    NeoButton(if (busy) "Working…" else "Add shared limit", modifier = Modifier.fillMaxWidth(), onClick = onAddSharedBudget, enabled = !busy)
                 }
             }
         } else {
-            Text("Run the Supabase SQL file included in this Android project before connecting. This native client uses Auth and row-level-security policies from that schema.", style = MaterialTheme.typography.bodySmall)
+            // ---- Cloud sync
+            NeoCard {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Box(Modifier.size(14.dp).clip(CircleShape).background(if (connected) Pop.Teal else scheme.onSurface.copy(alpha = .3f)))
+                    Column(Modifier.weight(1f)) {
+                        Text(if (connected) "Connected" else "Not connected", fontWeight = FontWeight.Black, fontSize = 18.sp)
+                        Text(if (connected) "Account ${session.string("userId").take(8)}…" else "Add your Supabase details to begin.", style = MaterialTheme.typography.bodySmall, color = scheme.onSurface.copy(alpha = .65f))
+                    }
+                    if (connected) Text("Sign out", Modifier.clip(RoundedCornerShape(50)).clickable(onClick = onSignOut).padding(horizontal = 12.dp, vertical = 8.dp), color = scheme.error, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelMedium)
+                }
+            }
+            if (connected) {
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    SyncTile("⬆", "Push", "Send this device's data to your cloud.", Pop.Lavender, !busy, onPush, Modifier.weight(1f))
+                    SyncTile("⬇", "Pull", "Replace this device with the cloud copy.", Pop.Peach, !busy, onPull, Modifier.weight(1f))
+                }
+                NeoCard(fill = Pop.Sun.copy(alpha = .35f)) {
+                    Text("Before you sync", fontWeight = FontWeight.Black)
+                    Text("Sync sends the full workspace to your Supabase account and is not end-to-end encrypted. Push replaces the cloud snapshot. Pull replaces this device's data, so push first if unsure.", style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 4.dp))
+                }
+            }
+            NeoCard {
+                Row(Modifier.clickable { showConfig = !showConfig }, verticalAlignment = Alignment.CenterVertically) {
+                    Text("Connection settings", Modifier.weight(1f), fontWeight = FontWeight.Black)
+                    Text(if (showConfig || !connected) "▴" else "▾", fontWeight = FontWeight.Black)
+                }
+                if (showConfig || !connected) {
+                    Spacer(Modifier.height(10.dp))
+                    Field("Project URL", url, onUrl, hint = "https://your-project.supabase.co")
+                    Spacer(Modifier.height(8.dp))
+                    Field("Public anon key", anon, onAnon)
+                    Spacer(Modifier.height(8.dp))
+                    Field("Email", email, onEmail)
+                    Spacer(Modifier.height(8.dp))
+                    Field("Password", password, onPassword)
+                    Spacer(Modifier.height(12.dp))
+                    NeoButton(if (busy) "Working…" else if (connected) "Reconnect" else "Sign in", modifier = Modifier.fillMaxWidth(), onClick = onSignIn, enabled = !busy)
+                }
+            }
+            if (!connected) Text("Run the Supabase SQL file included in this Android project before connecting. This client uses Supabase Auth and row-level-security policies from that schema.", style = MaterialTheme.typography.bodySmall, color = scheme.onBackground.copy(alpha = .65f))
         }
     }
 }
