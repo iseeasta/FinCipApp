@@ -34,6 +34,9 @@ import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Palette
+import androidx.compose.material.icons.filled.Receipt
+import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.TrendingUp
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.filled.VolumeUp
@@ -141,15 +144,7 @@ fun SettingsTab(
                 when (current) {
                     "theme" -> ThemePage(vibe, onVibe, dark, onDark, accent)
                     "support" -> com.fincip.nativeapp.ui.SupportCard()
-                    "about" -> Column(verticalArrangement = Arrangement.spacedBy(14.dp)) { NeoCard {
-                        Text("FinCip", fontWeight = FontWeight.Black, style = MaterialTheme.typography.titleLarge)
-                        Spacer(Modifier.height(6.dp))
-                        Text("A local-first money companion. Your transactions, goals and profile stay on this device, encrypted, unless you choose to sync to your own Supabase project.", style = MaterialTheme.typography.bodyMedium)
-                        Spacer(Modifier.height(8.dp))
-                        Text("Version 1.0.0", style = MaterialTheme.typography.labelMedium)
-                    }
-                        com.fincip.nativeapp.ui.SupportCard()
-                    }
+                    "about" -> AboutPage()
                     else -> content(current)
                 }
             }
@@ -193,5 +188,63 @@ private fun ThemePage(vibe: String, onVibe: (String) -> Unit, dark: Boolean, onD
             }
             if (pair.size == 1) Spacer(Modifier.weight(1f))
         }
+    }
+}
+
+
+private data class Feature(val icon: androidx.compose.ui.graphics.vector.ImageVector, val title: String, val body: String)
+
+@Composable
+private fun AboutPage() {
+    val scheme = MaterialTheme.colorScheme
+    val groups = listOf(
+        "Your money" to listOf(
+            Feature(Icons.Default.Dashboard, "Overview & widgets", "A home screen of spending, income and savings you can rearrange, with charts and your companion on top."),
+            Feature(Icons.Default.Receipt, "Transactions", "Add entries in seconds with a date picker, payment-method dropdown and smart tag, project and payee suggestions. Every category has its own icon."),
+            Feature(Icons.Default.CloudUpload, "Import & export", "Bring in CSV statements from banks and UPI apps onto their real dates, with duplicate detection and one-tap undo. Export CSV, a PDF report, or a file shaped for another app."),
+            Feature(Icons.Default.CalendarMonth, "Bills, subscriptions & calendar", "Recurring bills with reminders, subscription tracking and a month-by-month money calendar.")
+        ),
+        "Plan ahead" to listOf(
+            Feature(Icons.Default.TrendingUp, "Budgets, goals & debt", "Category budgets, savings goals and debt payoff with progress you can see."),
+            Feature(Icons.Default.CurrencyExchange, "Multi-currency", "Record in any currency; totals are converted to your base currency while originals stay untouched."),
+            Feature(Icons.Default.AutoAwesome, "Insights & smart rules", "Spot trends, run what-if scenarios, forecast, and set rules that tag entries for you."),
+            Feature(Icons.Default.Description, "Net worth, portfolio & tax", "Track assets and liabilities, holdings, India finance tools and a global tax planner.")
+        ),
+        "Make it yours" to listOf(
+            Feature(Icons.Default.Favorite, "Companion & levels", "A pet that grows as you build the habit, with XP, ranks and achievements earned from real activity."),
+            Feature(Icons.Default.Palette, "Vibes, colours & icons", "Twelve vibes, seventeen accents, dark and light modes, app-icon colours, and a fully customisable profile and ID card."),
+            Feature(Icons.Default.Notifications, "Sound & reminders", "Optional click sounds and haptics, plus local bill reminders.")
+        ),
+        "Private by design" to listOf(
+            Feature(Icons.Default.Lock, "Encrypted & locked", "Your data is sealed on this device with AES-256 and an Android Keystore key. Lock with a password, PIN, pattern, drawing, rhythm, emoji or orbs, or use fingerprint and face."),
+            Feature(Icons.Default.VisibilityOff, "Privacy screen", "Hide amounts, and hide FinCip in the app switcher while blocking screenshots."),
+            Feature(Icons.Default.Info, "Backups you control", "Encrypted backup and portable JSON export. Sync only if you choose to connect your own project.")
+        )
+    )
+    Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        NeoCard {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                com.fincip.nativeapp.ui.FinCipMark(size = 44.dp)
+                Column { Text("FinCip", fontWeight = FontWeight.Black, style = MaterialTheme.typography.headlineSmall); Text("Version 1.0.0", style = MaterialTheme.typography.labelMedium) }
+            }
+            Spacer(Modifier.height(8.dp))
+            Text("A local-first money companion. Your transactions, goals and profile stay on this device, encrypted, unless you choose to sync to your own project.", style = MaterialTheme.typography.bodyMedium)
+        }
+        groups.forEach { (title, items) ->
+            Text(title.uppercase(), Modifier.padding(start = 6.dp), fontSize = 11.sp, letterSpacing = 1.6.sp, fontWeight = FontWeight.Black, color = scheme.onBackground.copy(alpha = .55f))
+            NeoCard {
+                items.forEachIndexed { i, f ->
+                    Row(Modifier.padding(vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                        Box(Modifier.size(42.dp).clip(RoundedCornerShape(14.dp)).background(scheme.primary.copy(alpha = .15f)), contentAlignment = Alignment.Center) { Icon(f.icon, null, tint = scheme.primary) }
+                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            Text(f.title, fontWeight = FontWeight.Bold)
+                            Text(f.body, fontSize = 13.sp, lineHeight = 18.sp, color = scheme.onSurface.copy(alpha = .68f))
+                        }
+                    }
+                    if (i < items.lastIndex) HorizontalDivider(color = scheme.outlineVariant.copy(alpha = .5f))
+                }
+            }
+        }
+        Text("Made with care. Voluntary support is available under Settings → Support the developer.", Modifier.padding(horizontal = 6.dp), fontSize = 12.sp, color = scheme.onBackground.copy(alpha = .55f))
     }
 }

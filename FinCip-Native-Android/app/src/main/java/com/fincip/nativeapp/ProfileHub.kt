@@ -471,6 +471,39 @@ private fun StatTileP(value: String, label: String, modifier: Modifier) {
 }
 
 @Composable
+private fun HeroCover(p: com.fincip.nativeapp.ui.ProfileData, raw: JsonObject, centered: Boolean, level: Int, entries: Int, streak: Int, joined: String?, onEdit: () -> Unit) {
+    val context = LocalContext.current
+    val img = if (raw.string("bannerMode") == "photo") com.fincip.nativeapp.ui.rememberUserImage(context, true, raw.double("bannerStamp").toLong()) else null
+    val glass = Color.White.copy(alpha = .16f)
+    Box(Modifier.fillMaxWidth().height(430.dp).clip(RoundedCornerShape(32.dp))) {
+        if (img != null) androidx.compose.foundation.Image(img, null, Modifier.matchParentSize(), contentScale = androidx.compose.ui.layout.ContentScale.Crop)
+        else Box(Modifier.matchParentSize().background(Brush.linearGradient(Banners[raw.double("banner").toInt().coerceIn(0, Banners.lastIndex)])))
+        Box(Modifier.matchParentSize().background(Brush.verticalGradient(0f to Color.Transparent, .45f to Color.Black.copy(alpha = .15f), 1f to Color.Black.copy(alpha = .82f))))
+        Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp), horizontalAlignment = if (centered) Alignment.CenterHorizontally else Alignment.Start) {
+            Box(Modifier.background(Color.White.copy(alpha = .9f), CircleShape).padding(4.dp)) { com.fincip.nativeapp.ui.UserAvatar(p, size = if (centered) 92.dp else 76.dp) }
+            Column(horizontalAlignment = if (centered) Alignment.CenterHorizontally else Alignment.Start) {
+                Text(p.name, fontWeight = FontWeight.Black, fontSize = 28.sp, color = Color.White, letterSpacing = (-0.6).sp, maxLines = 1)
+                if (p.handle.isNotBlank()) Text("@" + p.handle, color = Color.White.copy(alpha = .75f), fontSize = 14.sp)
+            }
+            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                listOf(p.tagline, raw.string("city"), joined?.let { "Since $it" } ?: "").filter { it.isNotBlank() }.forEach {
+                    Text(it, Modifier.clip(RoundedCornerShape(50)).background(glass).padding(horizontal = 12.dp, vertical = 6.dp), fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Color.White)
+                }
+            }
+            Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(glass).padding(vertical = 12.dp)) {
+                listOf("Lv $level" to "Level", entries.toString() to "Entries", "${streak}d" to "Streak").forEach { (v, l) ->
+                    Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(v, fontWeight = FontWeight.Black, fontSize = 18.sp, color = Color.White); Text(l, fontSize = 11.sp, color = Color.White.copy(alpha = .75f))
+                    }
+                }
+            }
+            if (raw.string("bio").isNotBlank()) Text(raw.string("bio"), color = Color.White.copy(alpha = .85f), fontSize = 13.sp, maxLines = 2)
+            Text("Edit profile", Modifier.fillMaxWidth().clip(RoundedCornerShape(50)).background(Color.White).clickable { onEdit() }.padding(vertical = 14.dp), textAlign = androidx.compose.ui.text.style.TextAlign.Center, fontWeight = FontWeight.Black, color = Color(0xFF16231B))
+        }
+    }
+}
+
+@Composable
 private fun ProfilePage(workspace: JsonObject, onProfileChange: (JsonObject.() -> Unit) -> Unit, onNavigate: (String) -> Unit) {
     val context = LocalContext.current
     val scheme = MaterialTheme.colorScheme
@@ -488,6 +521,10 @@ private fun ProfilePage(workspace: JsonObject, onProfileChange: (JsonObject.() -
     val joinedLong = joinedDate?.format(java.time.format.DateTimeFormatter.ofPattern("d MMM yyyy", java.util.Locale.ENGLISH))
 
     // ── Identity
+    val heroLayout = raw.string("heroLayout", "classic")
+    var studio by remember { mutableStateOf(false) }
+    if (heroLayout != "classic") HeroCover(p, raw, heroLayout == "centered", prog.level, txs.size, entryStreak(workspace), joinedShort, onEdit = { tap(); editing = true })
+    else
     Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(30.dp)).background(scheme.surface)) {
         Box(Modifier.fillMaxWidth()) {
             val bannerImg = if (raw.string("bannerMode") == "photo") com.fincip.nativeapp.ui.rememberUserImage(context, true, raw.double("bannerStamp").toLong()) else null
@@ -516,40 +553,17 @@ private fun ProfilePage(workspace: JsonObject, onProfileChange: (JsonObject.() -
         Spacer(Modifier.height(18.dp))
     }
 
-    // ── FinCip identity card
-    val cardA = scheme.primary
-    val cardB = androidx.compose.ui.graphics.lerp(scheme.primary, scheme.tertiary, .6f)
-    val cardC = androidx.compose.ui.graphics.lerp(scheme.primary, Color.Black, .45f)
-    val fg = scheme.onPrimary
-    Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(30.dp)).background(Brush.linearGradient(listOf(cardA, cardB, cardC)))) {
-        Box(Modifier.align(Alignment.TopEnd).offset(x = 50.dp, y = (-60).dp).size(200.dp).background(Color.White.copy(alpha = .10f), CircleShape))
-        Box(Modifier.align(Alignment.BottomStart).offset(x = (-40).dp, y = 60.dp).size(150.dp).background(Color.White.copy(alpha = .07f), CircleShape))
-        Column(Modifier.padding(22.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("FINCIP IDENTITY", Modifier.weight(1f), fontSize = 11.sp, letterSpacing = 2.sp, fontWeight = FontWeight.Black, color = fg.copy(alpha = .8f))
-                Text(rankOf(prog.level).uppercase(), Modifier.clip(RoundedCornerShape(50)).background(fg.copy(alpha = .2f)).padding(horizontal = 12.dp, vertical = 5.dp), fontSize = 11.sp, letterSpacing = 1.5.sp, fontWeight = FontWeight.Black, color = fg)
-            }
-            Row(verticalAlignment = Alignment.Bottom) {
-                Text("LV", Modifier.padding(bottom = 10.dp, end = 6.dp), fontWeight = FontWeight.Black, color = fg.copy(alpha = .75f))
-                Text(prog.level.toString(), fontSize = 60.sp, fontWeight = FontWeight.Black, color = fg, letterSpacing = (-2).sp, lineHeight = 60.sp)
-            }
-            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Box(Modifier.fillMaxWidth().height(8.dp).clip(CircleShape).background(fg.copy(alpha = .22f))) {
-                    Box(Modifier.fillMaxWidth((prog.xpInLevel / 100f).coerceIn(0.02f, 1f)).height(8.dp).clip(CircleShape).background(fg))
-                }
-                Text("${prog.xpInLevel} / 100 XP to level ${prog.level + 1} · ${prog.xp} XP total", fontSize = 12.sp, color = fg.copy(alpha = .85f))
-            }
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text(p.name, fontWeight = FontWeight.Bold, color = fg, maxLines = 1)
-                    Text("${unlocked.size} of ${badges.size} badges", fontSize = 12.sp, color = fg.copy(alpha = .75f))
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy((-8).dp)) {
-                    unlocked.take(4).forEach { b -> Box(Modifier.size(34.dp).background(fg.copy(alpha = .22f), CircleShape).border(2.dp, cardC, CircleShape), contentAlignment = Alignment.Center) { Text(b.emoji, fontSize = 16.sp) } }
-                }
-            }
-        }
-    }
+    // ── FinCip identity card (fully customisable)
+    val idData = com.fincip.nativeapp.ui.IdData(p.name, p.handle, prog.level, rankOf(prog.level), prog.xpInLevel, prog.xp, unlocked.map { it.emoji }, unlocked.size, badges.size, txs.size, entryStreak(workspace), joinedShort ?: "")
+    val idLook = com.fincip.nativeapp.ui.idLookOf(raw)
+    com.fincip.nativeapp.ui.IdentityCard(idData, idLook)
+    Text("✦  Customize cards", Modifier.fillMaxWidth().clip(RoundedCornerShape(50)).background(scheme.primary.copy(alpha = .14f)).clickable { tap(); studio = true }.padding(vertical = 13.dp), textAlign = androidx.compose.ui.text.style.TextAlign.Center, fontWeight = FontWeight.Bold, color = scheme.primary)
+    if (studio) com.fincip.nativeapp.ui.CardStudioDialog(
+        data = idData, look = idLook, heroLayout = heroLayout,
+        onHeroLayout = { v -> onProfileChange { addProperty("heroLayout", v) } },
+        onLook = { _, changes -> onProfileChange { changes.forEach { (k, v) -> when (v) { is Boolean -> addProperty(k, v); is Int -> addProperty(k, v); else -> addProperty(k, v.toString()) } } } },
+        onChangeBanner = { studio = false; editing = true }, onDismiss = { studio = false }
+    )
 
     // ── Achievements
     PHeader("Achievements", "${unlocked.size} / ${badges.size}")
