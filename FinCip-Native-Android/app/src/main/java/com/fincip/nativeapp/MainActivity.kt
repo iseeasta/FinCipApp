@@ -401,13 +401,14 @@ private fun FinCipApp(store: FinanceStore, securePrefs: SecurePrefs) {
         formExtra = existing?.arrayOrEmpty("splits")?.objects()?.joinToString(", ") { split -> "${split.string("category")}:${split.double("amount")}" }.orEmpty()
         formShared = existing?.bool("shared") ?: false
         if (type == "product") {
+            formCategory = existing?.string("kind", "SIP") ?: "SIP"
             formAmount = existing?.double("invested")?.toString().orEmpty()
-            formSaved = existing?.double("currentValue")?.toString() ?: "0"
+            formSaved = existing?.double("currentValue")?.toString() ?: ""
             formPerson = existing?.string("provider").orEmpty()
             formDate = existing?.string("startDate", isoToday()) ?: isoToday()
             formDeadline = existing?.string("maturityDate").orEmpty()
-            formContribution = existing?.double("monthlyContribution")?.toString() ?: "0"
-            formRate = existing?.double("rate")?.toString() ?: "0"
+            formContribution = existing?.double("monthlyContribution")?.toString() ?: ""
+            formRate = existing?.double("rate")?.toString() ?: (com.fincip.nativeapp.data.IndiaKinds.of("SIP").defaultRate?.toString() ?: "")
         }
         if (type == "emergency") {
             formName = "Emergency fund"
@@ -516,7 +517,8 @@ private fun FinCipApp(store: FinanceStore, securePrefs: SecurePrefs) {
             }
             "product" -> {
                 val invested = amount
-                val currentValue = formSaved.toDoubleOrNull() ?: 0.0
+                var currentValue = formSaved.toDoubleOrNull() ?: 0.0
+                if (editId.isBlank() && currentValue == 0.0) currentValue = invested
                 if (formName.isBlank() || invested < 0 || currentValue < 0 || invested + currentValue <= 0) { notify("Add a name and an invested amount or current value (numbers only, no negatives)"); return }
                 val contributions = existingArrayForProduct(editId)
                 item.addProperty("name", formName.trim())
@@ -809,7 +811,7 @@ private fun FinCipApp(store: FinanceStore, securePrefs: SecurePrefs) {
                         "goals" -> GoalsScreen(workspace, privacy, { openForm("goal") }, { goal -> activeGoalId = goal.string("id"); openForm("contribution"); formName = goal.string("name") }, { deleteFromArray("goals", it.string("id")) }, { openForm("emergency", workspace.objectOrEmpty("emergencyFund")) })
                         "networth" -> NetWorthScreen(workspace, privacy, { openForm("asset") }, { deleteFromArray("netWorthItems", it.string("id")) })
                         "simulator" -> SimulatorScreen(workspace)
-                        "india" -> IndiaFinanceScreen(workspace, privacy, { openForm("product") }, { deleteFromArray("financeProducts", it.string("id")) }, { product -> activeProductId = product.string("id"); openForm("productContribution", product) })
+                        "india" -> IndiaFinanceScreen(workspace, privacy, { openForm("product") }, { deleteFromArray("financeProducts", it.string("id")) }, { product -> activeProductId = product.string("id"); openForm("productContribution", product) }, { product -> openForm("product", product) })
                         "tax" -> TaxScreen(
                             country = taxCountry, onCountry = { code -> taxCountry = code; if (code == "IN") taxYear = "2026–27" else taxYear = "2026" },
                             taxYear = taxYear, onTaxYear = { taxYear = it }, income = taxIncome, onIncome = { taxIncome = it },
@@ -986,7 +988,8 @@ private fun FinCipApp(store: FinanceStore, securePrefs: SecurePrefs) {
                 projects = transactions(workspace).map { it.string("project") }.filter { it.isNotBlank() }.groupingBy { it }.eachCount().entries.sortedByDescending { it.value }.map { it.key },
                 tags = transactions(workspace).flatMap { t -> t.arrayOrEmpty("tags").map { it.asStringOr() } }.filter { it.isNotBlank() && it != "imported" }.groupingBy { it }.eachCount().entries.sortedByDescending { it.value }.map { it.key },
                 people = transactions(workspace).map { it.string("person") }.filter { it.isNotBlank() }.groupingBy { it }.eachCount().entries.sortedByDescending { it.value }.map { it.key },
-                accounts = transactions(workspace).map { it.string("account") }.filter { it.isNotBlank() }.distinct()
+                accounts = transactions(workspace).map { it.string("account") }.filter { it.isNotBlank() }.distinct(),
+                providers = workspace.arrayOrEmpty("financeProducts").objects().map { it.string("provider") }.filter { it.isNotBlank() }.distinct()
             )
         )
     }
@@ -1128,7 +1131,7 @@ private fun FinanceEntryDialog(
         "transaction" -> listOf("Food", "Transport", "Shopping", "Bills", "Health", "Education", "Entertainment", "Travel", "Home", "Subscriptions", "Personal care", "EMI", "Salary", "Freelance", "Business", "Investment", "Gift", "Refund", "Other")
         "investment" -> listOf("Stock", "Mutual fund", "ETF", "Crypto", "Other")
         "asset" -> listOf("Asset", "Liability")
-        "product" -> listOf("SIP", "Mutual fund", "EPF", "PPF", "NPS", "FD", "RD", "Gold", "Other")
+        "product" -> com.fincip.nativeapp.data.IndiaKinds.all.map { it.id }
         else -> null
     }
     val categoryLabel = when (type) { "investment" -> "Asset type"; "asset" -> "Item type"; "product" -> "Product type"; else -> "Category" }
@@ -1169,11 +1172,23 @@ private fun FinanceEntryDialog(
                     if (type == "transaction") PopSegmented(listOf("expense" to "↗  Expense", "income" to "↙  Income"), transactionType) { t -> onTransactionType(t); val pool = if (t == "income") com.fincip.nativeapp.ui.INCOME_CATEGORIES else com.fincip.nativeapp.ui.EXPENSE_CATEGORIES; if (category !in pool) onCategory(if (t == "income") "Salary" else "Food") }
                     if (type == "goal") PopSegmented(listOf("savings" to "Savings goal", "debt" to "Debt payoff"), transactionType, onTransactionType)
                     if (type == "bill") PopSegmented(listOf("weekly" to "Weekly", "monthly" to "Monthly", "yearly" to "Yearly"), frequency, onFrequency)
-                    if (categoryOptions != null && type != "transaction") PopChipPicker(categoryLabel, categoryOptions, category, onCategory)
+                    if (categoryOptions != null && type != "transaction" && type != "product") PopChipPicker(categoryLabel, categoryOptions, category, onCategory)
                     if (hasAmount) PopChipPicker("Currency", CURRENCY_INFO.map { it.code }, currency, onCurrency)
 
                     if (type == "transaction") com.fincip.nativeapp.ui.TransactionFormBody(transactionType == "income", name, onName, category, onCategory, date, onDate, account, onAccount, person, onPerson, project, onProject, tags, onTags, extra, onExtra, suggestions)
-                    if (type != "transaction") NeoCard {
+                    if (type == "product") com.fincip.nativeapp.ui.ProductFormBody(
+                        kind = category, onKind = { k ->
+                            val prev = com.fincip.nativeapp.data.IndiaKinds.of(category)
+                            val next = com.fincip.nativeapp.data.IndiaKinds.of(k)
+                            val rateNow = rate.toDoubleOrNull()
+                            if (rate.isBlank() || rateNow == null || rateNow == 0.0 || rateNow == prev.defaultRate) onRate(next.defaultRate?.toString() ?: "")
+                            onCategory(k)
+                        },
+                        name = name, onName = onName, provider = person, onProvider = onPerson, invested = amount, current = saved, onCurrent = onSaved,
+                        monthly = contribution, onMonthly = onContribution, rate = rate, onRate = onRate, start = date, onStart = onDate,
+                        maturity = deadline, onMaturity = onDeadline, currency = currency, existingProviders = suggestions.providers
+                    )
+                    if (type != "transaction" && type != "product") NeoCard {
                         Text("DETAILS", style = MaterialTheme.typography.labelSmall, letterSpacing = 1.2.sp, fontWeight = FontWeight.Black, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .55f))
                         Spacer(Modifier.height(10.dp))
                         Column(verticalArrangement = fieldGap) {

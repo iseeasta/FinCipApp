@@ -32,7 +32,7 @@ import java.time.LocalDate
 import java.time.ZoneOffset
 
 /** Values already used in the user's data, offered as one-tap suggestions so nothing has to be typed twice. */
-data class FormSuggestions(val projects: List<String> = emptyList(), val tags: List<String> = emptyList(), val people: List<String> = emptyList(), val accounts: List<String> = emptyList())
+data class FormSuggestions(val projects: List<String> = emptyList(), val tags: List<String> = emptyList(), val people: List<String> = emptyList(), val accounts: List<String> = emptyList(), val providers: List<String> = emptyList())
 
 val EXPENSE_CATEGORIES = listOf("Food", "Transport", "Shopping", "Bills", "Health", "Education", "Entertainment", "Travel", "Home", "Subscriptions", "Personal care", "EMI", "Investment", "Gift", "Other")
 val INCOME_CATEGORIES = listOf("Salary", "Freelance", "Business", "Investment", "Gift", "Refund", "Other")

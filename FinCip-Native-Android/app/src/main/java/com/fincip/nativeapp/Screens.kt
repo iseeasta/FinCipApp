@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -759,6 +760,10 @@ private fun kindFill(kind: String): Color = when (kind) {
     "FD" -> Color(0xFFF9C6D0)
     "RD" -> Color(0xFFD9F0A3)
     "Gold" -> Pop.Sun
+    "ELSS" -> Color(0xFFCFE8FF)
+    "Stocks" -> Color(0xFFFFD3B0)
+    "NSC" -> Color(0xFFE3D3F7)
+    "SGB" -> Color(0xFFFFEBA8)
     else -> Color(0xFFE4DFF5)
 }
 
@@ -787,7 +792,7 @@ private fun EmptyPortfolioArt(modifier: Modifier = Modifier) {
 }
 
 @Composable
-fun IndiaFinanceScreen(workspace: JsonObject, privacy: Boolean, onAdd: () -> Unit, onDelete: (JsonObject) -> Unit, onContribute: (JsonObject) -> Unit) {
+fun IndiaFinanceScreen(workspace: JsonObject, privacy: Boolean, onAdd: () -> Unit, onDelete: (JsonObject) -> Unit, onContribute: (JsonObject) -> Unit, onEdit: (JsonObject) -> Unit = {}) {
     val products = workspace.arrayOrEmpty("financeProducts").objects()
     val base = workspace.objectOrEmpty("settings").string("baseCurrency", "INR")
     val investedTotal = products.sumOf { toBase(workspace, it.double("invested"), it.string("currency", "INR")) }
@@ -801,9 +806,18 @@ fun IndiaFinanceScreen(workspace: JsonObject, privacy: Boolean, onAdd: () -> Uni
     }.toMutableList().also { it.add(LocalDate.now() to currentTotal) }
     val portfolioXirr = estimateXirr(portfolioFlows)
     var selectedKind by remember { mutableStateOf("All") }
-    val standardKinds = listOf("SIP", "Mutual fund", "EPF", "PPF", "NPS", "FD", "RD", "Gold")
+    val standardKinds = com.fincip.nativeapp.data.IndiaKinds.all.map { it.id }.filter { it != "Other" }
     val kinds = standardKinds + products.map { it.string("kind", it.string("type", "Product")) }.filter { it !in standardKinds }.distinct()
-    val shown = if (selectedKind == "All") products else products.filter { it.string("kind", it.string("type", "Product")) == selectedKind }
+    var sortBy by remember { mutableStateOf("Value") }
+    fun valOf(p: JsonObject) = toBase(workspace, p.double("currentValue", p.double("value")), p.string("currency", "INR"))
+    fun gainPct(p: JsonObject): Double { val i = p.double("invested", p.double("amount")); return if (i > 0) (p.double("currentValue", p.double("value")) - i) / i else -9.0 }
+    val filtered = if (selectedKind == "All") products else products.filter { it.string("kind", it.string("type", "Product")) == selectedKind }
+    val shown = when (sortBy) {
+        "Gain %" -> filtered.sortedByDescending { gainPct(it) }
+        "Newest" -> filtered.sortedByDescending { it.string("startDate") }
+        "Maturity" -> filtered.sortedBy { it.string("maturityDate").ifBlank { "9999" } }
+        else -> filtered.sortedByDescending { valOf(it) }
+    }
     val gainFg = if (gainTotal >= 0) GainDark else LossDark
 
     PageColumn {
@@ -836,9 +850,21 @@ fun IndiaFinanceScreen(workspace: JsonObject, privacy: Boolean, onAdd: () -> Uni
         NeoButton("+  Add investment", modifier = Modifier.fillMaxWidth(), onClick = onAdd)
         if (products.isNotEmpty() && currentTotal > 0) BreakdownCard("Allocation by product", products.groupBy { it.string("kind", it.string("type", "Product")) }.map { (k, v) -> k to v.sumOf { p -> toBase(workspace, p.double("currentValue", p.double("value")), p.string("currency", "INR")) } }.sortedByDescending { it.second }, privacy, base, "value", "")
 
+        if (products.isNotEmpty()) {
+            MixBarCard(workspace, products, privacy)
+            InvestedGrowthCard(portfolioFlows.filter { it.second < 0 }, base, privacy)
+            IndiaInsightsCard(workspace, products, privacy, base)
+            FyTrackerCard(workspace, products, privacy, base)
+        }
+        SipCalculatorCard(base)
+
         Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             PopChip("All", selectedKind == "All", { selectedKind = "All" })
             kinds.forEach { kind -> PopChip(kind, selectedKind == kind, { selectedKind = kind }) }
+        }
+        if (products.size > 1) Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text("SORT", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Black, letterSpacing = 1.2.sp)
+            listOf("Value", "Gain %", "Newest", "Maturity").forEach { PopChip(it, sortBy == it, { sortBy = it }) }
         }
 
         if (products.isEmpty()) {
@@ -868,11 +894,17 @@ fun IndiaFinanceScreen(workspace: JsonObject, privacy: Boolean, onAdd: () -> Uni
             val cagr = if (invested > 0 && current >= 0 && years > 0.01) ((current / invested).pow(1.0 / years) - 1.0) * 100.0 else null
             NeoCard(fill = kindFill(kind)) {
                 Row(verticalAlignment = Alignment.Top) {
+                    Box(Modifier.size(44.dp).clip(CircleShape).background(Color.White.copy(alpha = .65f)), contentAlignment = Alignment.Center) {
+                        androidx.compose.material3.Icon(com.fincip.nativeapp.ui.kindIcon(kind), null, tint = Pop.Ink)
+                    }
+                    Spacer(Modifier.width(12.dp))
                     Column(Modifier.weight(1f)) {
                         Text(kind.uppercase(), style = MaterialTheme.typography.labelSmall, letterSpacing = 1.2.sp, fontWeight = FontWeight.Black, color = Pop.Ink.copy(alpha = .7f))
                         Text(p.string("name", "Investment"), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Black, color = Pop.Ink)
                         Text(p.string("provider", "Provider not specified"), style = MaterialTheme.typography.bodySmall, color = Pop.Ink.copy(alpha = .75f))
                     }
+                    Box(Modifier.size(36.dp).clip(CircleShape).background(Color.White.copy(alpha = .55f)).clickable { onEdit(p) }, contentAlignment = Alignment.Center) { Text("✎", fontWeight = FontWeight.Black, color = Pop.Ink, fontSize = 16.sp) }
+                    Spacer(Modifier.width(6.dp))
                     Box(Modifier.size(36.dp).clip(CircleShape).background(Color.White.copy(alpha = .55f)).clickable { onDelete(p) }, contentAlignment = Alignment.Center) {
                         Text("×", fontWeight = FontWeight.Black, color = Pop.Ink, fontSize = 18.sp)
                     }
@@ -888,6 +920,19 @@ fun IndiaFinanceScreen(workspace: JsonObject, privacy: Boolean, onAdd: () -> Uni
                     SmallPill("XIRR ${irr?.let { "%.2f%%".format(it) } ?: "—"}")
                     SmallPill("CAGR ${cagr?.let { "%.2f%%".format(it) } ?: "—"}")
                     if (p.double("monthlyContribution") > 0) SmallPill("Monthly ${money(p.double("monthlyContribution"), currency)}")
+                }
+                if (currentTotal > 0) {
+                    val share = (valOf(p) / currentTotal).toFloat().coerceIn(0f, 1f)
+                    Spacer(Modifier.height(10.dp))
+                    Row(Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(50)).background(Color.White.copy(alpha = .55f))) {
+                        if (share > 0.01f) Box(Modifier.fillMaxHeight().fillMaxWidth(share).background(Pop.Ink.copy(alpha = .75f)))
+                    }
+                    Text("${(share * 100).toInt()}% of portfolio", style = MaterialTheme.typography.labelSmall, color = Pop.Ink.copy(alpha = .7f), modifier = Modifier.padding(top = 3.dp))
+                }
+                runCatching { LocalDate.parse(p.string("maturityDate")) }.getOrNull()?.let { md ->
+                    val days = ChronoUnit.DAYS.between(LocalDate.now(), md)
+                    Spacer(Modifier.height(6.dp))
+                    SmallPill(if (days < 0) "Matured ${-days} days ago" else if (days == 0L) "Matures today" else if (days < 120) "Matures in $days days" else "Matures in %.1f years".format(days / 365.25))
                 }
                 if (p.string("maturityDate").isNotBlank()) {
                     Spacer(Modifier.height(8.dp))
@@ -1304,5 +1349,147 @@ fun ProfileScreen(workspace: JsonObject, onEdit: () -> Unit, onBackup: () -> Uni
             }
         }
         NeoButton("Backup & privacy", Modifier.fillMaxWidth(), onBackup)
+    }
+}
+
+// ---------------------------------------------------------------- India finance: extra visual cards
+
+private fun bucketOf(kind: String): String = when (kind) {
+    "SIP", "Mutual fund", "ELSS", "Stocks" -> "Market-linked"
+    "EPF", "PPF", "FD", "RD", "NSC", "NPS" -> "Fixed / retirement"
+    "Gold", "SGB" -> "Gold"
+    else -> "Other"
+}
+
+private fun valueBase(workspace: JsonObject, p: JsonObject): Double = toBase(workspace, p.double("currentValue", p.double("value")), p.string("currency", "INR"))
+
+@Composable
+private fun MixBarCard(workspace: JsonObject, products: List<JsonObject>, privacy: Boolean) {
+    val buckets = products.groupBy { bucketOf(it.string("kind", it.string("type", "Other"))) }.mapValues { (_, v) -> v.sumOf { valueBase(workspace, it) } }.filter { it.value > 0 }
+    val total = buckets.values.sum()
+    if (total <= 0) return
+    val colors = mapOf("Market-linked" to Pop.Lavender, "Fixed / retirement" to Color(0xFFB8E3F2), "Gold" to Pop.Sun, "Other" to Color(0xFFE4DFF5))
+    NeoCard {
+        CardLabel("Asset mix")
+        Row(Modifier.fillMaxWidth().height(22.dp).clip(RoundedCornerShape(50))) {
+            buckets.entries.sortedByDescending { it.value }.forEach { (k, v) ->
+                Box(Modifier.fillMaxHeight().weight((v / total).toFloat().coerceAtLeast(0.02f)).background(colors[k] ?: Color.Gray))
+            }
+        }
+        Spacer(Modifier.height(10.dp))
+        buckets.entries.sortedByDescending { it.value }.forEach { (k, v) ->
+            LegendRow(colors[k] ?: Color.Gray, k, if (privacy) "••" else "${(v / total * 100).toInt()}%")
+            Spacer(Modifier.height(4.dp))
+        }
+        Text("Market-linked values move daily; fixed and retirement products grow on a schedule.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .55f))
+    }
+}
+
+@Composable
+private fun InvestedGrowthCard(outflows: List<Pair<LocalDate, Double>>, base: String, privacy: Boolean) {
+    if (outflows.size < 2) return
+    val months = com.fincip.nativeapp.data.IndiaMath.cumulativeByMonth(outflows, LocalDate.now(), 12)
+    if (months.last().second <= 0.0) return
+    NeoCard {
+        CardLabel("Money invested · last 12 months")
+        LineChart(
+            labels = months.map { it.first.format(DateTimeFormatter.ofPattern("MMM", Locale.ENGLISH)) },
+            series = listOf(ChartSeries("Invested", Pop.Teal, months.map { it.second })),
+            currency = base, hideValues = privacy, height = 150.dp
+        )
+        Text("Cumulative contributions you have recorded. It does not include market gains.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .55f))
+    }
+}
+
+@Composable
+private fun IndiaInsightsCard(workspace: JsonObject, products: List<JsonObject>, privacy: Boolean, base: String) {
+    val insights = mutableListOf<Pair<String, String>>()
+    val total = products.sumOf { valueBase(workspace, it) }
+    val top = products.maxByOrNull { valueBase(workspace, it) }
+    if (top != null && total > 0 && products.size > 1) {
+        val share = valueBase(workspace, top) / total * 100
+        if (share >= 50) insights += "⚖" to "${top.string("name")} is ${share.toInt()}% of your portfolio. Heavy concentration in one holding raises risk."
+    }
+    val monthly = products.sumOf { toBase(workspace, it.double("monthlyContribution"), it.string("currency", "INR")) }
+    if (monthly > 0) insights += "🔁" to "You commit ${if (privacy) "••••" else money(monthly, base)} every month across ${products.count { it.double("monthlyContribution") > 0 }} product(s)."
+    val ranked = products.filter { it.double("invested", it.double("amount")) > 0 }.map { it to (it.double("currentValue", it.double("value")) - it.double("invested", it.double("amount"))) / it.double("invested", it.double("amount")) * 100 }
+    ranked.maxByOrNull { it.second }?.let { (p, g) -> if (ranked.size > 1) insights += "🏆" to "Best so far: ${p.string("name")} at ${if (privacy) "••" else "%+.1f".format(g)}% on invested amount." }
+    ranked.minByOrNull { it.second }?.let { (p, g) -> if (ranked.size > 1 && g < 0) insights += "⚠" to "${p.string("name")} is below what you put in (${if (privacy) "••" else "%.1f".format(g)}%). Check if it still fits your plan." }
+    products.mapNotNull { p -> runCatching { LocalDate.parse(p.string("maturityDate")) }.getOrNull()?.let { p to ChronoUnit.DAYS.between(LocalDate.now(), it) } }
+        .filter { it.second in 0..120 }.minByOrNull { it.second }?.let { (p, d) -> insights += "📅" to "${p.string("name")} matures in $d days. Decide early where the money goes next." }
+    val bucketTotals = products.groupBy { bucketOf(it.string("kind", it.string("type", "Other"))) }.mapValues { (_, v) -> v.sumOf { valueBase(workspace, it) } }
+    if (total > 0 && (bucketTotals["Market-linked"] ?: 0.0) == 0.0 && products.size >= 2) insights += "📈" to "Nothing here is market-linked. That is safe, but may not beat inflation over long periods."
+    if (insights.isEmpty()) return
+    NeoCard(fill = Pop.Sun.copy(alpha = .35f)) {
+        CardLabel("Smart insights")
+        insights.take(5).forEach { (icon, text) ->
+            Row(Modifier.padding(vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.Top) {
+                Text(icon, fontSize = 18.sp)
+                Text(text, style = MaterialTheme.typography.bodyMedium)
+            }
+        }
+        Text("Observations from the numbers you entered. They are not investment advice.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .55f), modifier = Modifier.padding(top = 4.dp))
+    }
+}
+
+@Composable
+private fun FyTrackerCard(workspace: JsonObject, products: List<JsonObject>, privacy: Boolean, base: String) {
+    val today = LocalDate.now()
+    fun fyAmount(kinds: Set<String>) = products.filter { it.string("kind") in kinds }.sumOf { p ->
+        com.fincip.nativeapp.data.IndiaMath.contributedInFy(productFlows(p, p.double("invested")), today).let { toBase(workspace, it, p.string("currency", "INR")) }
+    }
+    val c80 = fyAmount(setOf("PPF", "ELSS", "EPF", "NSC"))
+    val nps = fyAmount(setOf("NPS"))
+    if (c80 <= 0 && nps <= 0 && products.none { it.string("kind") in setOf("PPF", "ELSS", "EPF", "NSC", "NPS") }) return
+    NeoCard {
+        CardLabel("Tax-saving tracker · ${com.fincip.nativeapp.data.IndiaMath.fiscalYearLabel(today)}")
+        FyBar("Section 80C products (PPF, ELSS, EPF, NSC)", c80, 150000.0, base, privacy)
+        Spacer(Modifier.height(10.dp))
+        FyBar("NPS (extra 80CCD(1B) limit)", nps, 50000.0, base, privacy)
+        Text("Counts contributions you recorded this April–March. Limits shown are the commonly quoted old-regime ones and tax rules change, so verify with the current Income Tax rules or a CA. This is not tax advice.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .55f), modifier = Modifier.padding(top = 8.dp))
+    }
+}
+
+@Composable
+private fun FyBar(label: String, used: Double, limit: Double, base: String, privacy: Boolean) {
+    val frac = (used / limit).toFloat().coerceIn(0f, 1f)
+    Text(label, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
+    Spacer(Modifier.height(4.dp))
+    Row(Modifier.fillMaxWidth().height(12.dp).clip(RoundedCornerShape(50)).background(MaterialTheme.colorScheme.surfaceVariant)) {
+        if (frac > 0.01f) Box(Modifier.fillMaxHeight().fillMaxWidth(frac).background(if (frac >= 1f) Pop.Teal else Pop.Lavender))
+    }
+    Text(
+        if (privacy) "•••• of ${compactMoney(limit, base)}" else "${compactMoney(used, base)} of ${compactMoney(limit, base)}  ·  ${compactMoney((limit - used).coerceAtLeast(0.0), base)} room left",
+        style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(top = 3.dp)
+    )
+}
+
+@Composable
+private fun SipCalculatorCard(base: String) {
+    var lump by remember { mutableStateOf(false) }
+    var amount by remember { mutableStateOf(5000f) }
+    var years by remember { mutableStateOf(10f) }
+    var rate by remember { mutableStateOf(12f) }
+    val months = (years * 12).toInt()
+    val invested = if (lump) amount.toDouble() else amount.toDouble() * months
+    val fv = if (lump) com.fincip.nativeapp.data.IndiaMath.lumpFutureValue(amount.toDouble(), rate.toDouble(), years.toDouble(), 1)
+    else com.fincip.nativeapp.data.IndiaMath.sipFutureValue(amount.toDouble(), rate.toDouble(), months)
+    NeoCard(fill = Pop.Mint) {
+        CardLabel("What-if calculator")
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            PopChip("Monthly SIP", !lump, { lump = false; amount = 5000f })
+            PopChip("One-time", lump, { lump = true; amount = 100000f })
+        }
+        Spacer(Modifier.height(8.dp))
+        Text(money(fv, base), fontSize = 30.sp, fontWeight = FontWeight.Black, color = Pop.Ink, maxLines = 1)
+        Text("Put in ${money(invested, base)}  ·  growth ${money((fv - invested).coerceAtLeast(0.0), base)}", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold, color = Pop.Ink)
+        Spacer(Modifier.height(6.dp))
+        Text(if (lump) "Amount ${money(amount.toDouble(), base)}" else "Per month ${money(amount.toDouble(), base)}", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = Pop.Ink)
+        Slider(amount, { amount = (Math.round(it / 500f) * 500f).coerceAtLeast(500f) }, valueRange = 500f..(if (lump) 2000000f else 100000f))
+        Text("Years ${years.toInt()}", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = Pop.Ink)
+        Slider(years, { years = Math.round(it).toFloat() }, valueRange = 1f..40f)
+        Text("Expected return ${"%.1f".format(rate)}% a year", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = Pop.Ink)
+        Slider(rate, { rate = Math.round(it * 2f) / 2f }, valueRange = 1f..20f)
+        Text("Illustration with a constant return. Real returns vary and can be negative. Not a promise or advice.", style = MaterialTheme.typography.labelSmall, color = Pop.Ink.copy(alpha = .65f))
     }
 }
