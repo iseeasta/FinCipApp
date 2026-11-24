@@ -74,8 +74,9 @@ fun nextStageLevel(level: Int): Int? = when { level < 3 -> 3; level < 6 -> 6; le
  * reacts to [mood], blinks and breathes. Everything is drawn on a Canvas, so it scales cleanly.
  */
 @Composable
-fun PetCharacter(look: PetLook, mood: PetMood, level: Int, modifier: Modifier = Modifier, diameter: Dp = 140.dp, showBackground: Boolean = true) {
+fun PetCharacter(look: PetLook, mood: PetMood, level: Int, modifier: Modifier = Modifier, diameter: Dp = 140.dp, showBackground: Boolean = true, talking: Boolean = false) {
     val t = rememberInfiniteTransition(label = "pet")
+    val talkOsc by t.animateFloat(0.15f, 1f, infiniteRepeatable(tween(170, easing = FastOutSlowInEasing), RepeatMode.Reverse), label = "talk")
     val breathe by t.animateFloat(0f, 1f, infiniteRepeatable(tween(1500, easing = FastOutSlowInEasing), RepeatMode.Reverse), label = "breathe")
     val blink by t.animateFloat(0f, 1f, infiniteRepeatable(keyframes<Float> { durationMillis = 3600; 0f at 0; 0f at 3300; 1f at 3420; 0f at 3540 }), label = "blink")
     val spin by t.animateFloat(0f, 6.2831855f, infiniteRepeatable(tween(6000)), label = "spin")
@@ -83,11 +84,11 @@ fun PetCharacter(look: PetLook, mood: PetMood, level: Int, modifier: Modifier = 
     Canvas(modifier.size(diameter)) {
         val s = size.minDimension
         if (showBackground) drawRoundRect(PetOptions.backgrounds[look.background.coerceIn(0, PetOptions.backgrounds.lastIndex)], cornerRadius = CornerRadius(s * 0.2f))
-        drawCharacter(look, mood, stage, breathe, blink, spin)
+        drawCharacter(look, mood, stage, breathe, blink, spin, if (talking) talkOsc else 0f)
     }
 }
 
-private fun DrawScope.drawCharacter(look: PetLook, mood: PetMood, stage: Int, breathe: Float, blink: Float, spin: Float) {
+private fun DrawScope.drawCharacter(look: PetLook, mood: PetMood, stage: Int, breathe: Float, blink: Float, spin: Float, talk: Float = 0f) {
     val s = size.minDimension
     val animal = look.species >= 2
     val skin = if (look.species == 6) Color(0xFFF5F0E6) else if (animal) PetOptions.furs[look.skin.coerceIn(0, PetOptions.furs.lastIndex)] else PetOptions.skins[look.skin.coerceIn(0, PetOptions.skins.lastIndex)]
@@ -246,6 +247,9 @@ private fun DrawScope.drawCharacter(look: PetLook, mood: PetMood, stage: Int, br
         PetMood.STRESSED -> drawArc(ink, 200f, 140f, false, Offset(cx - headR * 0.16f, mouthY), Size(headR * 0.32f, headR * 0.2f), style = Stroke(s * 0.011f, cap = StrokeCap.Round))
         PetMood.CELEBRATE, PetMood.THRIVING -> drawArc(Color(0xFF8E2B3B), 0f, 180f, true, Offset(cx - headR * 0.24f, mouthY - headR * 0.1f), Size(headR * 0.48f, headR * 0.32f))
         else -> drawArc(ink, 20f, 140f, false, Offset(cx - headR * 0.2f, mouthY - headR * 0.12f), Size(headR * 0.4f, headR * 0.26f), style = Stroke(s * 0.011f, cap = StrokeCap.Round))
+    }
+    if (talk > 0f && look.species != 7) {
+        drawOval(Color(0xFF8E2B3B), Offset(cx - headR * 0.15f, mouthY - headR * 0.04f), Size(headR * 0.30f, headR * 0.30f * talk))
     }
 
     // Accessories

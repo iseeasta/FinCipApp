@@ -19,6 +19,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -74,35 +75,50 @@ fun petLookOf(m: JsonObject): PetLook {
 /** Home-screen companion card. Reads the same customisation as the studio, so edits show up here instantly. */
 @Composable
 fun PetHomeCard(workspace: JsonObject, mood: PetMood, condition: String, streak: Int, onClick: () -> Unit) {
-    val lines = remember(condition) { mascotLines(condition).shuffled() }
-    var lineIdx by remember(condition) { mutableStateOf(0) }
-    val moodText = lines[lineIdx % lines.size]
     val pet = workspace.objectOrEmpty("mascot")
+    val name = pet.string("name", "Mochi")
     val look = petLookOf(pet)
     val prog = petProgress(workspace)
     val stage = petStage(prog.level)
     val tap = rememberTap()
     val bg = PetOptions.backgrounds[look.background.coerceIn(0, PetOptions.backgrounds.lastIndex)]
-    val fg = if (bg.red * 0.3f + bg.green * 0.59f + bg.blue * 0.11f > 0.5f) Color(0xFF16231B) else Color(0xFFF4F4F2)
+    val dark = bg.red * 0.3f + bg.green * 0.59f + bg.blue * 0.11f <= 0.5f
+    val fg = if (dark) Color(0xFFF4F4F2) else Color(0xFF16231B)
+    val bubble = if (dark) Color.White.copy(alpha = .16f) else Color.White.copy(alpha = .85f)
+    val lines = remember(workspace, condition, name, streak) {
+        val brain = com.fincip.nativeapp.data.PetBrain.lines(buildPetCtx(workspace, name, streak))
+        // Fixed condition lines still play, so the old moods keep their voice.
+        (brain.take(2) + mascotLines(condition).shuffled().take(1) + brain.drop(2)).distinct()
+    }
+    var lineIdx by remember(lines) { mutableStateOf(0) }
+    var talking by remember { mutableStateOf(true) }
+    var hopKey by remember { mutableStateOf(0) }
+    LaunchedEffect(lines) {
+        while (true) { kotlinx.coroutines.delay(9000); lineIdx++; hopKey++ }
+    }
     NeoCard(fill = bg) {
-        Row(Modifier.clickable { tap(); lineIdx++ }, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-            PetCharacter(look, mood, prog.level, diameter = 128.dp, showBackground = false)
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(pet.string("name", "Mochi"), fontWeight = FontWeight.Black, fontSize = 21.sp, color = fg, maxLines = 1)
-                    Text("LVL ${prog.level}", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Black, color = bg, modifier = Modifier.clip(RoundedCornerShape(50)).background(fg).padding(horizontal = 9.dp, vertical = 4.dp))
-                }
-                Text("${PetStageNames[stage]} stage", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = fg.copy(alpha = .75f))
-                Text(moodText, color = fg.copy(alpha = .9f), style = MaterialTheme.typography.bodySmall, maxLines = 3)
-                ProgressBar(prog.xpInLevel / 100f, fg)
-                Text("Customize ›", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Black, color = fg, modifier = Modifier.clip(RoundedCornerShape(50)).border(1.5.dp, fg, RoundedCornerShape(50)).clickable { tap(); onClick() }.padding(horizontal = 10.dp, vertical = 4.dp))
-                val next = nextStageLevel(prog.level)
-                Text(
-                    "${prog.xpInLevel} / 100 XP · " + (if (streak > 0) "$streak-day streak" else "log something to start a streak") + (if (next != null) " · grows at Lv $next" else ""),
-                    style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = fg
-                )
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Box(Modifier.clickable { tap(); lineIdx++; hopKey++ }) { LivingPet(look, mood, prog.level, talking, hopKey, 132.dp) }
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text("$name says", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Black, letterSpacing = 1.2.sp, color = fg.copy(alpha = .7f))
+                PetSpeech(lines[lineIdx % lines.size], bubble, fg, { talking = it })
+                Text("tap me for another", style = MaterialTheme.typography.labelSmall, color = fg.copy(alpha = .55f))
             }
         }
+        Spacer(Modifier.height(10.dp))
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(name, fontWeight = FontWeight.Black, fontSize = 20.sp, color = fg, maxLines = 1)
+            Text("LVL ${prog.level}", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Black, color = bg, modifier = Modifier.clip(RoundedCornerShape(50)).background(fg).padding(horizontal = 9.dp, vertical = 3.dp))
+            Text("${PetStageNames[stage]} stage", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = fg.copy(alpha = .75f), modifier = Modifier.weight(1f), maxLines = 1)
+            Text("Customize ›", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Black, color = fg, modifier = Modifier.clip(RoundedCornerShape(50)).border(1.5.dp, fg, RoundedCornerShape(50)).clickable { tap(); onClick() }.padding(horizontal = 10.dp, vertical = 4.dp))
+        }
+        Spacer(Modifier.height(8.dp))
+        ProgressBar(prog.xpInLevel / 100f, fg)
+        val next = nextStageLevel(prog.level)
+        Text(
+            "${prog.xpInLevel} / 100 XP · " + (if (streak > 0) "$streak-day streak" else "log something to start a streak") + (if (next != null) " · grows at Lv $next" else ""),
+            style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = fg, modifier = Modifier.padding(top = 4.dp)
+        )
     }
 }
 

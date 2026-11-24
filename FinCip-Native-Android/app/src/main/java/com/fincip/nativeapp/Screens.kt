@@ -656,48 +656,150 @@ fun BudgetsScreen(workspace: JsonObject, month: String, privacy: Boolean, onAdd:
 }
 
 @Composable
-fun GoalsScreen(workspace: JsonObject, privacy: Boolean, onAdd: () -> Unit, onContribute: (JsonObject) -> Unit, onDelete: (JsonObject) -> Unit, onEditEmergency: () -> Unit) {
+fun GoalsScreen(workspace: JsonObject, privacy: Boolean, onAdd: () -> Unit, onContribute: (JsonObject) -> Unit, onDelete: (JsonObject) -> Unit, onEditEmergency: () -> Unit, onEdit: (JsonObject) -> Unit = {}) {
+    val today = java.time.LocalDate.now()
+    val base = workspace.objectOrEmpty("settings").string("baseCurrency", "INR")
+    val goals = workspace.arrayOrEmpty("goals").objects()
+    val savings = goals.filter { it.string("type") != "debt" }
+    val debtsAll = goals.filter { it.string("type") == "debt" }
     PageColumn {
-        PageHeading("FUTURE YOU", "Goals with momentum.", "Savings targets and debt payoff plans, with progress that moves when you do.")
+        PageHeading("FUTURE YOU", "Goals with momentum.", "Savings targets and debt payoff plans, with a real finish date for each.")
         run {
-            val gs = workspace.arrayOrEmpty("goals").objects().filter { it.string("type") != "debt" }
-            val target = gs.sumOf { it.double("target") }
-            val saved = gs.sumOf { it.double("saved") }
+            val target = savings.sumOf { it.double("target") }
+            val saved = savings.sumOf { it.double("saved") }
             val ratio = if (target > 0) saved / target else 0.0
             NeoCard(fill = Pop.Mint) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                    RingGauge(ratio.toFloat(), Pop.Teal, if (target > 0) "${(ratio * 100).toInt().coerceIn(0, 999)}%" else "—", diameter = 108.dp, caption = "saved")
+                    RingGauge(ratio.toFloat(), Pop.Forest, if (target > 0) "${(ratio * 100).toInt().coerceIn(0, 999)}%" else "—", diameter = 108.dp, caption = "saved")
                     Column(Modifier.weight(1f)) {
                         CardLabel("Savings goals")
-                        Text("${gs.size} active", fontSize = 28.sp, fontWeight = FontWeight.Black)
-                        Text(if (privacy) "•••• saved so far" else "${compactMoney(saved, "INR")} saved so far", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
+                        Text("${savings.size} active", fontSize = 28.sp, fontWeight = FontWeight.Black)
+                        Text(if (privacy) "•••• saved so far" else "${compactMoney(saved, base)} of ${compactMoney(target, base)}", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
+                        val monthly = savings.sumOf { it.double("monthlyContribution") }
+                        if (monthly > 0) Text(if (privacy) "•••• going in each month" else "${compactMoney(monthly, base)} going in each month", style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+            }
+        }
+        if (debtsAll.isNotEmpty()) {
+            val owed = debtsAll.sumOf { it.double("target") }
+            val repaid = debtsAll.sumOf { it.double("saved") }
+            val ratio = if (owed > 0) repaid / owed else 0.0
+            val plans = debtsAll.filter { it.double("target") > it.double("saved") }.map { d ->
+                com.fincip.nativeapp.data.GoalMath.simulateDebt(d.double("target") - d.double("saved"), d.double("monthlyContribution"), d.double("interestRate"))
+            }
+            val stuck = plans.any { it == null }
+            val months = plans.filterNotNull().maxOfOrNull { it.months }
+            val interest = plans.filterNotNull().sumOf { it.totalInterest }
+            NeoCard(fill = Pop.Peach) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                    RingGauge(ratio.toFloat(), Pop.Coral, "${(ratio * 100).toInt().coerceIn(0, 100)}%", diameter = 108.dp, caption = "repaid")
+                    Column(Modifier.weight(1f)) {
+                        CardLabel("Debt")
+                        Text(if (privacy) "••••" else "${compactMoney((owed - repaid).coerceAtLeast(0.0), base)} left", fontSize = 26.sp, fontWeight = FontWeight.Black)
+                        Text(
+                            when {
+                                plans.isEmpty() -> "All cleared. Nice."
+                                stuck -> "Some payments don't cover the interest."
+                                months != null -> "Debt-free around ${today.plusMonths(months.toLong()).month.name.take(3).lowercase().replaceFirstChar { it.uppercase() }} ${today.plusMonths(months.toLong()).year}"
+                                else -> "Add monthly payments for a finish date."
+                            }, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold
+                        )
+                        if (!privacy && interest > 0 && !stuck) Text("≈ ${compactMoney(interest, base)} interest still to pay", style = MaterialTheme.typography.bodySmall)
                     }
                 }
             }
         }
         NeoButton("+ Add savings or debt goal", onClick = onAdd)
-        val goals = workspace.arrayOrEmpty("goals").objects()
         if (goals.isEmpty()) NeoCard { Text("Start with one meaningful goal", fontWeight = FontWeight.Black); Text("Emergency fund, a trip, a course or a debt payoff.", style = MaterialTheme.typography.bodySmall) }
         goals.forEach { goal ->
+            val isDebt = goal.string("type") == "debt"
+            val cur = goal.string("currency", "INR")
             val target = goal.double("target"); val saved = goal.double("saved")
+            val remaining = (target - saved).coerceAtLeast(0.0)
+            val pct = if (target > 0) (saved / target).toFloat().coerceIn(0f, 1f) else 0f
+            val mo = goal.double("monthlyContribution")
+            val apr = goal.double("interestRate")
+            val dl = runCatching { java.time.LocalDate.parse(goal.string("deadline")) }.getOrNull()
+            val purposeRaw = goal.string("category")
+            val purpose = (if (isDebt) com.fincip.nativeapp.data.GoalPurposes.debt else com.fincip.nativeapp.data.GoalPurposes.saving).firstOrNull { it == purposeRaw } ?: "Other"
+            val accent = if (isDebt) Pop.Coral else Pop.Forest
+            val etaMonths: Int? = if (remaining <= 0) 0 else if (isDebt) com.fincip.nativeapp.data.GoalMath.simulateDebt(remaining, mo, apr)?.months else com.fincip.nativeapp.data.GoalMath.monthsToSave(remaining, mo)
+            val monthsToDeadline = dl?.let { com.fincip.nativeapp.data.GoalMath.monthsUntil(it, today) }
+            val needed = if (dl != null && monthsToDeadline != null && monthsToDeadline > 0 && remaining > 0) com.fincip.nativeapp.data.GoalMath.requiredMonthly(remaining, monthsToDeadline) else null
+            val (status, statusColor) = when {
+                remaining <= 0 -> "DONE" to Pop.Lime
+                etaMonths == null -> (if (mo <= 0) "NO PLAN" else "STUCK") to Pop.Sun
+                dl != null && monthsToDeadline != null && etaMonths > monthsToDeadline.coerceAtLeast(0) -> "BEHIND" to Pop.Peach
+                else -> "ON TRACK" to Pop.Mint
+            }
             NeoCard {
-                Row(verticalAlignment = Alignment.CenterVertically) { Text(goal.string("name", "Goal"), Modifier.weight(1f), fontWeight = FontWeight.Black); Text(if (goal.string("type") == "debt") "DEBT" else "SAVING", style = MaterialTheme.typography.labelSmall) }
-                Text(if (privacy) "•••• / ••••" else "${money(saved, goal.string("currency", "INR"))} / ${money(target, goal.string("currency", "INR"))}", fontWeight = FontWeight.Bold)
-                ProgressBar(if (target > 0) (saved / target).toFloat() else 0f, Green, Modifier.padding(vertical = 8.dp))
-                Text("${if (target > 0) (saved / target * 100).toInt().coerceIn(0, 100) else 0}% · ${goal.string("deadline", "No deadline")}", style = MaterialTheme.typography.bodySmall)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { NeoButton(if (goal.string("type") == "debt") "Log repayment" else "Add savings", Modifier.weight(1f), { onContribute(goal) }); TextButtonTiny("Remove") { onDelete(goal) } }
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Box(Modifier.size(46.dp).clip(CircleShape).background(statusColor.copy(alpha = .55f)), contentAlignment = Alignment.Center) { Text(com.fincip.nativeapp.data.GoalPurposes.icon(purpose), fontSize = 22.sp) }
+                    Column(Modifier.weight(1f)) {
+                        Text(goal.string("name", "Goal"), fontWeight = FontWeight.Black, style = MaterialTheme.typography.titleMedium, maxLines = 1)
+                        Text("${if (isDebt) "Debt" else "Saving"} · $purpose", style = MaterialTheme.typography.labelSmall)
+                    }
+                    Text(status, fontSize = 11.sp, fontWeight = FontWeight.Black, color = Pop.Ink, modifier = Modifier.clip(RoundedCornerShape(50)).background(statusColor).padding(horizontal = 10.dp, vertical = 5.dp))
+                }
+                Spacer(Modifier.height(12.dp))
+                Row(verticalAlignment = Alignment.Bottom) {
+                    Text(if (privacy) "••••" else money(saved, cur), fontSize = 24.sp, fontWeight = FontWeight.Black)
+                    Text(if (privacy) "  of ••••" else "  of ${money(target, cur)}", style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(bottom = 3.dp).weight(1f))
+                    Text("${(pct * 100).toInt()}%", fontWeight = FontWeight.Black, color = accent)
+                }
+                ProgressBar(pct, accent, Modifier.padding(top = 8.dp, bottom = 4.dp))
+                Row(Modifier.fillMaxWidth()) {
+                    listOf(25, 50, 75, 100).forEach { m ->
+                        val hit = pct * 100 >= m
+                        Text(if (hit) "●  $m%" else "○  $m%", Modifier.weight(1f), fontSize = 11.sp, fontWeight = if (hit) FontWeight.Black else FontWeight.Medium, color = if (hit) accent else MaterialTheme.colorScheme.onSurface.copy(alpha = .45f), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                    }
+                }
+                Spacer(Modifier.height(10.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    @Composable fun Stat(label: String, value: String, mod: Modifier) = Column(mod.clip(RoundedCornerShape(14.dp)).background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = .6f)).padding(10.dp)) {
+                        Text(label, fontSize = 10.sp, fontWeight = FontWeight.Black, letterSpacing = .8.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .55f)); Text(value, fontWeight = FontWeight.Black, fontSize = 13.sp, maxLines = 1)
+                    }
+                    Stat(if (isDebt) "LEFT" else "TO GO", if (privacy) "••••" else compactMoney(remaining, cur), Modifier.weight(1f))
+                    Stat(if (isDebt) "PAYING" else "MONTHLY", if (privacy) "••••" else if (mo > 0) compactMoney(mo, cur) else "—", Modifier.weight(1f))
+                    Stat(if (remaining <= 0) "STATUS" else "FINISH", if (remaining <= 0) "Done" else etaMonths?.let { today.plusMonths(it.toLong()).let { d -> "${d.month.name.take(3).lowercase().replaceFirstChar { c -> c.uppercase() }} ${d.year}" } } ?: "—", Modifier.weight(1f))
+                }
+                if (isDebt && remaining > 0) {
+                    val plan = com.fincip.nativeapp.data.GoalMath.simulateDebt(remaining, mo, apr)
+                    Text(
+                        when {
+                            mo <= 0 -> "Set a monthly payment to see the payoff date."
+                            plan == null -> "Your payment is below the monthly interest, so this never shrinks."
+                            else -> "Interest still to pay ≈ ${if (privacy) "••••" else money(plan.totalInterest, cur)} at ${apr}% p.a."
+                        }, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 8.dp)
+                    )
+                } else if (!isDebt && remaining > 0 && needed != null) {
+                    Text(if (mo >= needed - 0.5) "Saving enough to hit ${dl}." else "Needs ${if (privacy) "••••" else money(Math.ceil(needed), cur)} a month to hit ${dl}.", style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 8.dp))
+                } else if (dl != null && remaining > 0) Text("Target date ${dl}", style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 8.dp))
+                Spacer(Modifier.height(10.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    NeoButton(if (isDebt) "Log repayment" else "Add savings", Modifier.weight(1f), { onContribute(goal) })
+                    TextButtonTiny("Edit") { onEdit(goal) }
+                    TextButtonTiny("Remove") { onDelete(goal) }
+                }
             }
         }
         val ef = workspace.objectOrEmpty("emergencyFund")
-        val base = workspace.objectOrEmpty("settings").string("baseCurrency", "INR")
         val monthlyEssentials = expenseTotal(workspace, currentMonth())
         val targetBalance = monthlyEssentials * ef.double("targetMonths", 6.0)
         NeoCard {
-            Row(verticalAlignment = Alignment.CenterVertically) { Text("Emergency fund", Modifier.weight(1f), fontWeight = FontWeight.Black); InlineAction("Edit", onEditEmergency) }
-            Text("Balance ${if (privacy) "••••" else money(ef.double("balance"), base)} · Target ${ef.double("targetMonths", 6.0).toInt()} months of current-month spending", style = MaterialTheme.typography.bodySmall)
-            ProgressBar(if (targetBalance > 0) (ef.double("balance") / targetBalance).toFloat() else 0f, Gold, Modifier.padding(vertical = 7.dp))
-            Text(if (targetBalance > 0) "${(ef.double("balance") / targetBalance * 100).toInt().coerceIn(0, 100)}% of estimated target · based on current-month recorded spending" else "Add expenses and set a reserve balance to estimate your target.", style = MaterialTheme.typography.labelSmall)
-            Text("A dedicated buffer for essential expenses and unexpected costs.", style = MaterialTheme.typography.labelSmall)
+            Row(verticalAlignment = Alignment.CenterVertically) { Text("🛟  Emergency fund", Modifier.weight(1f), fontWeight = FontWeight.Black); InlineAction("Edit", onEditEmergency) }
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp), modifier = Modifier.padding(top = 8.dp)) {
+                val efPct = if (targetBalance > 0) (ef.double("balance") / targetBalance).toFloat() else 0f
+                RingGauge(efPct, Gold, if (targetBalance > 0) "${(efPct * 100).toInt().coerceIn(0, 999)}%" else "—", diameter = 84.dp)
+                Column {
+                    Text(if (privacy) "••••" else money(ef.double("balance"), base), fontWeight = FontWeight.Black, fontSize = 22.sp)
+                    Text("Target ${ef.double("targetMonths", 6.0).toInt()} months of spending", style = MaterialTheme.typography.bodySmall)
+                    val perMonth = if (ef.double("targetMonths", 6.0) > 0 && monthlyEssentials > 0) monthlyEssentials else 0.0
+                    if (perMonth > 0) Text("Covers ${"%.1f".format(ef.double("balance") / perMonth)} months at this month's pace", style = MaterialTheme.typography.labelSmall)
+                    else Text("Add expenses and a reserve balance to estimate your target.", style = MaterialTheme.typography.labelSmall)
+                }
+            }
         }
         val debts = goals.filter { it.string("type") == "debt" && it.double("target") > it.double("saved") }
         if (debts.isNotEmpty()) {
@@ -1138,6 +1240,22 @@ private fun estimateXirr(flows: List<Pair<LocalDate, Double>>): Double? {
 @Composable
 private fun SmallPill(text: String) { Surface(shape = RoundedCornerShape(50), color = Color.White.copy(alpha = .7f), contentColor = Pop.Ink) { Text(text, Modifier.padding(horizontal = 12.dp, vertical = 6.dp), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelSmall, maxLines = 1) } }
 
+private val TaxDot = listOf(Color(0xFF2E9E6B), Color(0xFFE0614F), Color(0xFF7B6CF6), Color(0xFFF2B84B))
+
+@Composable
+private fun RateCurve(points: List<Pair<Double, Double>>, currentIndex: Int, line: Color, ink: Color) {
+    Canvas(Modifier.fillMaxWidth().height(120.dp)) {
+        if (points.size < 2) return@Canvas
+        val maxY = (points.maxOf { it.second } * 1.15).coerceAtLeast(5.0)
+        val w = size.width; val h = size.height
+        fun pt(i: Int) = Offset(w * i / (points.size - 1), h - (points[i].second / maxY * h).toFloat())
+        for (k in 1..3) drawLine(ink.copy(alpha = .08f), Offset(0f, h * k / 4), Offset(w, h * k / 4), 1.dp.toPx())
+        for (i in 0 until points.size - 1) drawLine(line, pt(i), pt(i + 1), 3.dp.toPx(), cap = androidx.compose.ui.graphics.StrokeCap.Round)
+        val c = pt(currentIndex.coerceIn(0, points.lastIndex))
+        drawCircle(Color.White, 8.dp.toPx(), c); drawCircle(line, 5.dp.toPx(), c)
+    }
+}
+
 @Composable
 fun TaxScreen(
     country: String, onCountry: (String) -> Unit,
@@ -1150,99 +1268,180 @@ fun TaxScreen(
     regime: String, onRegime: (String) -> Unit,
     ageGroup: String, onAgeGroup: (String) -> Unit,
     resident: Boolean, onResident: (Boolean) -> Unit,
-    onSave: () -> Unit
+    onSave: () -> Unit,
+    workspace: JsonObject = JsonObject()
 ) {
-    val countries = listOf(
-        "IN" to "India · INR", "US" to "United States · USD", "GB" to "United Kingdom · GBP",
-        "DE" to "Germany · EUR", "JP" to "Japan · JPY", "CN" to "China · CNY",
-        "CH" to "Switzerland · CHF", "CA" to "Canada · CAD", "AU" to "Australia · AUD", "SG" to "Singapore · SGD"
-    )
-    val selectedCountry = countries.firstOrNull { it.first == country } ?: countries.first()
-    val currency = when (country) {
-        "US" -> "USD"; "GB" -> "GBP"; "DE" -> "EUR"; "JP" -> "JPY"; "CN" -> "CNY"
-        "CH" -> "CHF"; "CA" -> "CAD"; "AU" -> "AUD"; "SG" -> "SGD"; else -> "INR"
-    }
-    val india = country == "IN"
+    val scheme = MaterialTheme.colorScheme
+    val info = com.fincip.nativeapp.data.TaxEngine.info(country)
+    val cur = info.currency
+    var socialText by remember(country) { mutableStateOf("") }
     val gross = income.toDoubleOrNull() ?: 0.0
-    val taxable = if (india) {
-        max(0.0, gross - (standardDeduction.toDoubleOrNull() ?: 0.0) - if (regime == "old") (deductions.toDoubleOrNull() ?: 0.0) else 0.0)
-    } else {
-        max(0.0, gross - (allowance.toDoubleOrNull() ?: 0.0) - (deductions.toDoubleOrNull() ?: 0.0))
-    }
-    val indiaEstimate = if (india) indiaEstimate(taxable, regime, ageGroup, resident) else null
-    val globalRate = (rate.toDoubleOrNull() ?: 0.0).coerceIn(0.0, 100.0)
-    val globalTax = taxable * globalRate / 100.0
-    val estimated = indiaEstimate?.total ?: globalTax
+    val india = country == "IN"
+    val input = com.fincip.nativeapp.data.TaxInput(
+        country, gross, status = if (regime == "joint") "joint" else "single", extraDeductions = deductions.toDoubleOrNull() ?: 0.0,
+        regime = if (regime == "old") "old" else "new", ageGroup = ageGroup, resident = resident,
+        regionalPct = rate.toDoubleOrNull() ?: 0.0, socialPct = socialText.toDoubleOrNull()
+    )
+    val res = com.fincip.nativeapp.data.TaxEngine.compute(input)
+    fun pct(v: Double) = "%.1f%%".format(Locale.ENGLISH, v)
+
     PageColumn {
-        PageHeading("GLOBAL TAX PLANNING", "A clearer tax picture.", "Choose a jurisdiction and build an annual estimate in local currency. India uses a simplified slab model; other countries use your own effective-rate assumptions.")
-        NeoCard {
-            Selector(
-                label = "Tax jurisdiction",
-                value = selectedCountry.second,
-                options = countries.map { it.second },
-                onSelect = { label ->
-                onCountry(countries.first { it.second == label }.first)
-                  }
-           )
-            Field("Tax year / period", taxYear, onTaxYear, hint = "Use the tax year or fiscal period that applies to you.")
-            Field("Annual gross income ($currency)", income, onIncome)
-            if (india) {
-                Selector("Tax regime", regime, listOf("new", "old"), onRegime)
-                Field("Standard deduction ($currency)", standardDeduction, onStandardDeduction)
-                if (regime == "old") Field("Other eligible deductions / exemptions ($currency)", deductions, onDeductions)
-                Selector("Age category", ageGroup, listOf("below60", "senior60", "super80"), onAgeGroup)
-                FilterChip(selected = resident, onClick = { onResident(!resident) }, label = { Text(if (resident) "Resident individual · rebate eligible" else "Non-resident · no resident rebate") })
-            } else {
-                Field("Personal allowance / tax-free threshold ($currency)", allowance, onAllowance)
-                Field("Other deductible amount ($currency)", deductions, onDeductions)
-                Field("Estimated effective income-tax rate (%)", rate, onRate, hint = "Enter your own estimated effective rate, based on local tax guidance.")
-            }
-            Text("Taxable planning income: ${money(taxable, currency)}", fontWeight = FontWeight.Bold)
-            NeoButton("Save tax assumptions", onClick = onSave)
-        }
-        NeoCard {
-            Text("ESTIMATED ANNUAL TAX · $taxYear", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Black)
-            Text(money(estimated, currency), style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Black)
-            Divider(Modifier.padding(vertical = 7.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) { Text("Taxable income", Modifier.weight(1f)); Text(money(taxable, currency), fontWeight = FontWeight.Bold) }
-            Row(verticalAlignment = Alignment.CenterVertically) { Text(if (india) "Tax before rebate" else "Entered effective rate"); Spacer(Modifier.weight(1f)); Text(if (india) money(indiaEstimate?.beforeRebate ?: 0.0, currency) else "${"%.1f".format(globalRate)}%", fontWeight = FontWeight.Bold) }
-            if (india) {
-                Row(verticalAlignment = Alignment.CenterVertically) { Text("Estimated rebate"); Spacer(Modifier.weight(1f)); Text("−${money(indiaEstimate?.rebate ?: 0.0, currency)}", color = Green, fontWeight = FontWeight.Bold) }
-                Row(verticalAlignment = Alignment.CenterVertically) { Text("Health & education cess"); Spacer(Modifier.weight(1f)); Text(money(indiaEstimate?.cess ?: 0.0, currency), fontWeight = FontWeight.Bold) }
-            } else {
-                Row(verticalAlignment = Alignment.CenterVertically) { Text("Estimated take-home"); Spacer(Modifier.weight(1f)); Text(money(max(0.0, gross - globalTax), currency), color = Green, fontWeight = FontWeight.Bold) }
+        PageHeading("GLOBAL TAX PLANNING", "See where your pay goes.", "Real tax rules for ${com.fincip.nativeapp.data.TaxEngine.countries.size} countries, with the take-home, bracket and comparison visuals. A planning estimate, not a tax return.")
+        // ---- Country picker
+        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            com.fincip.nativeapp.data.TaxEngine.countries.forEach { c ->
+                PopChip("${c.flag} ${c.name}", c.code == country, { onCountry(c.code); onRegime(if (c.code == "IN") "new" else "single"); onRate("0") })
             }
         }
-        Text(
-            if (india) "India estimate is simplified: it does not model surcharge, special-rate income, every deduction, TDS, advance tax or filing details. Verify current slabs and eligibility before filing."
-            else "This is a user-assumption estimate, not a country-specific statutory calculator. It does not automatically model progressive brackets, regional taxes, social insurance, tax credits, residency tests or capital gains. Confirm rules for ${selectedCountry.second} and $taxYear with the official tax authority.",
-            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .65f)
-        )
-    }
-}
+        NeoCard {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(info.flag, fontSize = 30.sp)
+                Spacer(Modifier.width(10.dp))
+                Column(Modifier.weight(1f)) {
+                    Text("${info.name} · ${info.taxYear}", fontWeight = FontWeight.Black, fontSize = 17.sp)
+                    Text(info.rulesNote, style = MaterialTheme.typography.bodySmall, color = scheme.onSurface.copy(alpha = .65f))
+                }
+            }
+            if (info.approximate) Text("Approximate mode: some parts of this country's system are simplified. Check the notes below.", Modifier.padding(top = 8.dp).clip(RoundedCornerShape(12.dp)).background(Pop.Sun.copy(alpha = .35f)).padding(10.dp), style = MaterialTheme.typography.labelMedium)
+            Spacer(Modifier.height(12.dp))
+            Field("Annual gross income ($cur)", income, onIncome)
+            if (india) {
+                Spacer(Modifier.height(8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { PopChip("New regime", regime != "old", { onRegime("new") }); PopChip("Old regime", regime == "old", { onRegime("old") }) }
+                Spacer(Modifier.height(8.dp))
+                Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf("below60" to "Under 60", "senior60" to "60 to 79", "super80" to "80+").forEach { (k, l) -> PopChip(l, ageGroup == k, { onAgeGroup(k) }) }
+                    PopChip(if (resident) "Resident" else "Non-resident", resident, { onResident(!resident) })
+                }
+                if (regime == "old") { Spacer(Modifier.height(8.dp)); Field("Deductions: 80C, 80D, HRA, home loan… ($cur)", deductions, onDeductions) }
+            } else {
+                if (info.hasStatus) {
+                    Spacer(Modifier.height(8.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { PopChip(if (country == "DE") "Single (Grundtarif)" else "Single", regime != "joint", { onRegime("single") }); PopChip(if (country == "DE") "Joint (splitting)" else "Married filing jointly", regime == "joint", { onRegime("joint") }) }
+                }
+                Spacer(Modifier.height(8.dp))
+                Field(when (country) { "US" -> "Itemised deductions, if above standard ($cur)"; "GB" -> "Pension contributions ($cur)"; "CA" -> "RRSP and other deductions ($cur)"; "DE" -> "Work expenses above €1,230 ($cur)"; else -> "Other deductible amounts ($cur)" }, deductions, onDeductions)
+                info.regionalLabel?.let { Spacer(Modifier.height(8.dp)); Field(it, rate, onRate) }
+                info.socialLabel?.let { Spacer(Modifier.height(8.dp)); Field(it, socialText, { socialText = it.filter { c -> c.isDigit() || c == '.' }.take(5) }, hint = "Leave blank for the built-in estimate") }
+            }
+            Spacer(Modifier.height(12.dp))
+            NeoButton("Save these assumptions", modifier = Modifier.fillMaxWidth(), onClick = onSave)
+        }
 
-private data class IndiaTaxEstimate(val beforeRebate: Double, val rebate: Double, val cess: Double, val total: Double)
-
-private fun indiaEstimate(taxable: Double, regime: String, ageGroup: String, resident: Boolean): IndiaTaxEstimate {
-    val slabs = if (regime == "new") listOf(400000.0 to 0.0, 800000.0 to .05, 1200000.0 to .10, 1600000.0 to .15, 2000000.0 to .20, 2400000.0 to .25, Double.POSITIVE_INFINITY to .30)
-    else when (ageGroup) {
-        "super80" -> listOf(500000.0 to 0.0, 1000000.0 to .20, Double.POSITIVE_INFINITY to .30)
-        "senior60" -> listOf(300000.0 to 0.0, 500000.0 to .05, 1000000.0 to .20, Double.POSITIVE_INFINITY to .30)
-        else -> listOf(250000.0 to 0.0, 500000.0 to .05, 1000000.0 to .20, Double.POSITIVE_INFINITY to .30)
+        if (gross <= 0) {
+            NeoCard { Text("Enter your annual gross income", fontWeight = FontWeight.Black); Text("Then you will see take-home pay, bracket ladder, marginal rate and how ${info.name} compares with other countries.", style = MaterialTheme.typography.bodySmall) }
+        } else {
+            // ---- Hero: what you keep
+            Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(30.dp)).background(Brush.linearGradient(listOf(Pop.Forest, Color(0xFF14463A), Pop.Ink)))) {
+                Column(Modifier.padding(22.dp)) {
+                    Text("YOU KEEP · ${info.taxYear}", style = MaterialTheme.typography.labelSmall, letterSpacing = 1.8.sp, fontWeight = FontWeight.Black, color = Color.White.copy(alpha = .7f))
+                    val keep = money(res.takeHome, cur)
+                    Text(keep, fontSize = if (keep.length > 12) 30.sp else 40.sp, fontWeight = FontWeight.Black, color = Color.White, maxLines = 1, softWrap = false)
+                    Text("${money(res.takeHome / 12, cur)} a month  ·  ${pct(100 - res.effectivePct)} of gross", color = Pop.Lime, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
+                    Spacer(Modifier.height(14.dp))
+                    val parts = listOf(res.takeHome to "Take-home", res.incomeTax to "Income tax", res.social to "Social / payroll", res.regional to "Regional").filter { it.first > 0.5 }
+                    Row(Modifier.fillMaxWidth().height(16.dp).clip(RoundedCornerShape(50))) {
+                        parts.forEachIndexed { idx, (v, _) -> Box(Modifier.fillMaxHeight().weight((v / res.gross).toFloat().coerceAtLeast(0.01f)).background(if (idx == 0) Pop.Lime else TaxDot[(idx) % TaxDot.size])) }
+                    }
+                    Spacer(Modifier.height(10.dp))
+                    parts.forEachIndexed { idx, (v, label) ->
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 2.dp)) {
+                            Box(Modifier.size(10.dp).clip(CircleShape).background(if (idx == 0) Pop.Lime else TaxDot[idx % TaxDot.size]))
+                            Text("  $label", Modifier.weight(1f), color = Color.White.copy(alpha = .9f), style = MaterialTheme.typography.bodySmall)
+                            Text("${compactMoney(v, cur)}  ·  ${"%.0f".format(Locale.ENGLISH, v / res.gross * 100)}%", color = Color.White, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
+                }
+            }
+            // ---- Rates
+            NeoCard {
+                CardLabel("Your tax rates")
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(18.dp)) {
+                    RingGauge((res.effectivePct / 100).toFloat().coerceIn(0f, 1f), Pop.Teal, pct(res.effectivePct), diameter = 104.dp, caption = "effective")
+                    RingGauge((res.marginalPct / 100).toFloat().coerceIn(0f, 1f), Pop.Coral, pct(res.marginalPct), diameter = 104.dp, caption = "marginal")
+                }
+                Spacer(Modifier.height(8.dp))
+                Text("Effective is the share of your total pay that goes to tax and payroll contributions. Marginal is what the next unit you earn is taxed at, including contributions.", style = MaterialTheme.typography.bodySmall, color = scheme.onSurface.copy(alpha = .7f))
+            }
+            // ---- Line items
+            NeoCard {
+                CardLabel("Where it goes")
+                Row { Text("Gross income", Modifier.weight(1f)); Text(money(res.gross, cur), fontWeight = FontWeight.Bold) }
+                if (res.deduction > 0) Row { Text("Deductions and allowances", Modifier.weight(1f)); Text("−${money(res.deduction, cur)}", fontWeight = FontWeight.Bold, color = Green) }
+                Row { Text("Taxable income", Modifier.weight(1f)); Text(money(res.taxable, cur), fontWeight = FontWeight.Black) }
+                Divider(Modifier.padding(vertical = 8.dp))
+                res.lines.forEach { l -> Row(Modifier.padding(vertical = 2.dp)) { Text(l.label, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium); Text((if (l.amount < 0) "−" else "") + money(kotlin.math.abs(l.amount), cur), fontWeight = FontWeight.Bold, color = if (l.amount < 0) Green else scheme.onSurface) } }
+                Divider(Modifier.padding(vertical = 8.dp))
+                Row { Text("Total tax and contributions", Modifier.weight(1f), fontWeight = FontWeight.Black); Text(money(res.total, cur), fontWeight = FontWeight.Black) }
+            }
+            // ---- Bracket ladder
+            val ladder = res.slices.filter { it.from < maxOf(res.taxable * 1.35, res.slices.firstOrNull { s -> s.rate > 0 }?.to ?: 0.0) }.take(9)
+            if (ladder.size > 1) NeoCard {
+                CardLabel("Bracket ladder")
+                val maxTaxed = ladder.maxOf { it.taxed }.coerceAtLeast(1.0)
+                ladder.forEach { sl ->
+                    val here = res.taxable > sl.from && res.taxable <= sl.to
+                    val top = if (sl.to.isInfinite()) "+" else "–${compactMoney(sl.to, cur)}"
+                    Column(Modifier.padding(vertical = 5.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("${compactMoney(sl.from, cur)}$top", Modifier.weight(1f), style = MaterialTheme.typography.labelMedium, fontWeight = if (here) FontWeight.Black else FontWeight.Medium)
+                            if (here) Text("YOU ARE HERE", Modifier.clip(RoundedCornerShape(50)).background(scheme.primary).padding(horizontal = 8.dp, vertical = 2.dp), color = scheme.onPrimary, fontSize = 9.sp, fontWeight = FontWeight.Black)
+                            Text("  ${"%.1f".format(Locale.ENGLISH, sl.rate * 100).removeSuffix(".0")}%", fontWeight = FontWeight.Black)
+                        }
+                        Box(Modifier.fillMaxWidth().padding(top = 3.dp).height(10.dp).clip(RoundedCornerShape(50)).background(scheme.surfaceVariant)) {
+                            if (sl.taxed > 0) Box(Modifier.fillMaxHeight().fillMaxWidth((sl.taxed / maxTaxed).toFloat().coerceIn(0.03f, 1f)).background(if (here) Pop.Coral else Pop.Teal))
+                        }
+                        if (sl.taxed > 0) Text("${compactMoney(sl.taxed, cur)} taxed here → ${compactMoney(sl.tax, cur)}", style = MaterialTheme.typography.labelSmall, color = scheme.onSurface.copy(alpha = .6f))
+                    }
+                }
+            }
+            // ---- Curve + what-if
+            val mult = listOf(.25, .5, .75, 1.0, 1.25, 1.5, 2.0, 3.0)
+            val curve = mult.map { m -> (gross * m) to com.fincip.nativeapp.data.TaxEngine.compute(input.copy(gross = gross * m)).effectivePct }
+            val extra = gross * 0.10
+            val more = com.fincip.nativeapp.data.TaxEngine.compute(input.copy(gross = gross + extra))
+            val keepExtra = more.takeHome - res.takeHome
+            NeoCard {
+                CardLabel("Effective rate as income grows")
+                RateCurve(curve.map { it.first to it.second }, 3, Pop.Coral, scheme.onSurface)
+                Row { Text("${compactMoney(curve.first().first, cur)}", style = MaterialTheme.typography.labelSmall, modifier = Modifier.weight(1f)); Text("${compactMoney(curve.last().first, cur)}", style = MaterialTheme.typography.labelSmall) }
+                Spacer(Modifier.height(8.dp))
+                Text("A 10% raise (${money(extra, cur)}) would add ${money(keepExtra, cur)} to your take-home, which is ${"%.0f".format(Locale.ENGLISH, if (extra > 0) keepExtra / extra * 100 else 0.0)}% of the raise.", fontWeight = FontWeight.Bold)
+            }
+            // ---- Compare countries
+            val baseAmt = toBase(workspace, gross, cur)
+            val compare = com.fincip.nativeapp.data.TaxEngine.countries.mapNotNull { c ->
+                val unit = toBase(workspace, 1.0, c.currency)
+                if (unit <= 0) null else {
+                    val g2 = baseAmt / unit
+                    val r2 = if (c.code == country) res else com.fincip.nativeapp.data.TaxEngine.compute(com.fincip.nativeapp.data.TaxInput(c.code, g2))
+                    Triple(c, g2, r2)
+                }
+            }.sortedBy { it.third.effectivePct }
+            if (compare.size > 1) NeoCard {
+                CardLabel("Same pay, other countries")
+                val maxRate = compare.maxOf { it.third.effectivePct }.coerceAtLeast(1.0)
+                compare.forEach { (c, g2, r2) ->
+                    val me = c.code == country
+                    Row(Modifier.padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text("${c.flag} ${c.code}", Modifier.width(62.dp), fontWeight = if (me) FontWeight.Black else FontWeight.Medium)
+                        Box(Modifier.weight(1f).height(14.dp).clip(RoundedCornerShape(50)).background(scheme.surfaceVariant)) {
+                            Box(Modifier.fillMaxHeight().fillMaxWidth((r2.effectivePct / maxRate).toFloat().coerceIn(0.03f, 1f)).background(if (me) Pop.Coral else Pop.Teal))
+                        }
+                        Text(" ${pct(r2.effectivePct)}", Modifier.width(62.dp), fontWeight = FontWeight.Bold, textAlign = androidx.compose.ui.text.style.TextAlign.End)
+                    }
+                    Text("${compactMoney(r2.takeHome, c.currency)} take-home from ${compactMoney(g2, c.currency)}", Modifier.padding(start = 62.dp), style = MaterialTheme.typography.labelSmall, color = scheme.onSurface.copy(alpha = .6f))
+                }
+                Text("Your income converted at your saved reference rates, run through each country's default settings (single, no extra deductions, standard contributions). Rules and living costs differ, so this is a rough guide, not advice to move.", style = MaterialTheme.typography.labelSmall, color = scheme.onSurface.copy(alpha = .55f), modifier = Modifier.padding(top = 8.dp))
+            }
+            // ---- Notes
+            NeoCard(fill = Pop.Sun.copy(alpha = .3f)) {
+                CardLabel("Good to know")
+                (res.notes + info.rulesNote).distinct().forEach { Text("•  $it", style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(vertical = 2.dp)) }
+                Text("Rules were checked against official or published sources in November 2026 and change every year. This ignores capital gains, business income, treaties and many credits. Verify with your tax authority or an adviser before filing.", style = MaterialTheme.typography.labelSmall, color = scheme.onSurface.copy(alpha = .6f), modifier = Modifier.padding(top = 6.dp))
+            }
+        }
     }
-    var previous = 0.0
-    var tax = 0.0
-    slabs.forEach { (upper, slabRate) ->
-        val slice = (minOf(taxable, upper) - previous).coerceAtLeast(0.0)
-        tax += slice * slabRate
-        previous = upper
-    }
-    val rebate = if (resident && regime == "new") {
-        if (taxable <= 1200000.0) minOf(60000.0, tax) else minOf(tax, max(0.0, tax - (taxable - 1200000.0)))
-    } else if (resident && regime == "old" && taxable <= 500000.0) minOf(12500.0, tax) else 0.0
-    val afterRebate = max(0.0, tax - rebate)
-    val cess = afterRebate * .04
-    return IndiaTaxEstimate(tax, rebate, cess, afterRebate + cess)
 }
 
 @Composable
@@ -1289,21 +1488,100 @@ fun ForecastScreen(workspace: JsonObject, privacy: Boolean) {
 
 @Composable
 fun InsightsScreen(workspace: JsonObject, month: String, privacy: Boolean) {
-    val tx = monthlyTransactions(workspace, month).filter { com.fincip.nativeapp.data.isSpend(it) }
-    val groups = tx.groupBy { it.string("category", "Other") }.mapValues { (_, v) -> v.sumOf { toBase(workspace, it.double("amount"), it.string("currency", "INR")) } }.toList().sortedByDescending { it.second }
     val base = workspace.objectOrEmpty("settings").string("baseCurrency", "INR")
+    val ym = runCatching { java.time.YearMonth.parse(month) }.getOrDefault(java.time.YearMonth.now())
+    fun spends(m: String) = monthlyTransactions(workspace, m).filter { com.fincip.nativeapp.data.isSpend(it) }.mapNotNull { t ->
+        val d = runCatching { java.time.LocalDate.parse(t.string("date").take(10)) }.getOrNull() ?: return@mapNotNull null
+        com.fincip.nativeapp.data.Spend(d, toBase(workspace, t.double("amount"), t.string("currency", "INR")), t.string("category", "Other"), t.string("title"))
+    }
+    val ins = remember(workspace, month) { com.fincip.nativeapp.data.InsightsMath.analyze(spends(month), spends(ym.minusMonths(1).toString()), ym, java.time.LocalDate.now()) }
+    val groups = ins.categories.filter { it.current > 0 }.map { it.category to it.current }.sortedByDescending { it.second }
+    fun m(v: Double) = if (privacy) "••••" else money(v, base)
     PageColumn {
-        PageHeading("PATTERNS, NOT JUDGMENT", "Understand your spending.", "See category patterns for the selected month and spot the largest areas.")
-        BreakdownCard("Category split · $month", groups, privacy, base, "spent", "No spending data for $month yet.")
-        WeeklySpendCard(workspace, month, privacy)
-        MetricTile("Total spending", if (privacy) "••••" else money(expenseTotal(workspace, month), base), month)
-        if (groups.isEmpty()) NeoCard { Text("No spending data yet", fontWeight = FontWeight.Black); Text("Transactions will create spending insights.", style = MaterialTheme.typography.bodySmall) }
-        groups.forEachIndexed { index, pair ->
-            val total = expenseTotal(workspace, month)
-            NeoCard {
-                Row(verticalAlignment = Alignment.CenterVertically) { Text("${index + 1}. ${pair.first}", Modifier.weight(1f), fontWeight = FontWeight.Black); Text(if (privacy) "••••" else money(pair.second, base), fontWeight = FontWeight.Bold) }
-                ProgressBar(if (total > 0) (pair.second / total).toFloat() else 0f, listOf(Green, Gold, Blue, Red)[index % 4], Modifier.padding(vertical = 7.dp))
+        PageHeading("PATTERNS, NOT JUDGMENT", "Understand your spending.", "What changed, where it goes and when it leaks, for the selected month.")
+        if (ins.total <= 0) {
+            NeoCard { Text("No spending data for $month yet", fontWeight = FontWeight.Black); Text("Add transactions and this page turns them into patterns.", style = MaterialTheme.typography.bodySmall) }
+        } else {
+            val pct = ins.changePct
+            NeoCard(fill = Pop.Lavender) {
+                CardLabel("Spent in $month")
+                Text(m(ins.total), fontSize = 34.sp, fontWeight = FontWeight.Black, maxLines = 1)
+                if (pct != null) {
+                    val up = pct > 0
+                    Text(
+                        "${if (up) "▲" else "▼"} ${"%.0f".format(kotlin.math.abs(pct))}% ${if (up) "more" else "less"} than last month", fontSize = 12.sp, fontWeight = FontWeight.Black, color = Pop.Ink,
+                        modifier = Modifier.padding(top = 4.dp).clip(RoundedCornerShape(50)).background(if (up) Pop.Peach else Pop.Lime).padding(horizontal = 10.dp, vertical = 5.dp)
+                    )
+                } else Text("No last-month data to compare with yet.", style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 4.dp))
+                Spacer(Modifier.height(10.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Column(Modifier.weight(1f)) { Text("DAILY AVERAGE", fontSize = 10.sp, fontWeight = FontWeight.Black, letterSpacing = .8.sp); Text(m(ins.dailyAverage), fontWeight = FontWeight.Black) }
+                    Column(Modifier.weight(1f)) {
+                        Text(if (ins.projected != null) "ON PACE FOR" else "LAST MONTH", fontSize = 10.sp, fontWeight = FontWeight.Black, letterSpacing = .8.sp)
+                        Text(m(ins.projected ?: ins.previousTotal), fontWeight = FontWeight.Black)
+                    }
+                }
+                if (ins.projected != null) Text("Pace is a straight-line guess from the days so far.", style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(top = 4.dp))
             }
+
+            val dayNames = listOf("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
+            val findings = buildList {
+                ins.biggestRise?.let { add("📈" to "${it.category} is up ${m(it.change)} vs last month (${m(it.previous)} → ${m(it.current)}).") }
+                ins.biggestDrop?.let { add("📉" to "${it.category} fell by ${m(-it.change)} vs last month. Good move.") }
+                ins.biggest?.let { add("💥" to "Biggest single spend: ${it.title.ifBlank { it.category }} · ${m(it.amount)} on ${it.date.dayOfMonth} ${it.date.month.name.take(3).lowercase().replaceFirstChar { c -> c.uppercase() }}.") }
+                ins.busiestWeekday?.let { add("📅" to "${dayNames[it]} is your heaviest day, ${m(ins.weekdayTotals[it])} in total.") }
+                if (ins.weekendShare >= 0.45) add("🎉" to "${"%.0f".format(ins.weekendShare * 100)}% of spending lands on weekends.")
+                groups.firstOrNull()?.let { (c, v) -> add("🥇" to "$c takes ${"%.0f".format(v / ins.total * 100)}% of everything you spent.") }
+            }
+            if (findings.isNotEmpty()) NeoCard {
+                CardLabel("What stands out")
+                findings.forEach { (icon, text) ->
+                    Row(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) { Text(icon, fontSize = 18.sp); Text(text, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f)) }
+                }
+            }
+
+            BreakdownCard("Category split · $month", groups, privacy, base, "spent", "No spending data for $month yet.")
+
+            NeoCard {
+                CardLabel("This month vs last month")
+                val top = ins.categories.take(6)
+                val maxV = top.maxOfOrNull { maxOf(it.current, it.previous) }?.takeIf { it > 0 } ?: 1.0
+                top.forEach { c ->
+                    Column(Modifier.padding(top = 12.dp)) {
+                        Row { Text(c.category, Modifier.weight(1f), fontWeight = FontWeight.Black); Text(if (c.previous <= 0) "new" else "${if (c.change >= 0) "+" else "−"}${if (privacy) "••••" else compactMoney(kotlin.math.abs(c.change), base)}", fontWeight = FontWeight.Bold, color = if (c.change > 0) Pop.Coral else Pop.Forest, fontSize = 13.sp) }
+                        ProgressBar((c.current / maxV).toFloat(), Pop.Forest, Modifier.padding(top = 4.dp))
+                        ProgressBar((c.previous / maxV).toFloat(), Pop.Ink.copy(alpha = .3f), Modifier.padding(top = 3.dp))
+                    }
+                }
+                Row(Modifier.padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                    LegendRow(Pop.Forest, "This month", "", Modifier.weight(1f)); LegendRow(Pop.Ink.copy(alpha = .3f), "Last month", "", Modifier.weight(1f))
+                }
+            }
+
+            NeoCard {
+                CardLabel("Which days cost you")
+                val maxD = ins.weekdayTotals.maxOrNull()?.takeIf { it > 0 } ?: 1.0
+                Row(Modifier.fillMaxWidth().height(110.dp).padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Bottom) {
+                    ins.weekdayTotals.forEachIndexed { i, v ->
+                        Column(Modifier.weight(1f).fillMaxHeight(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Bottom) {
+                            Box(Modifier.fillMaxWidth().fillMaxHeight((v / maxD).toFloat().coerceIn(0.04f, 1f) * .8f).clip(RoundedCornerShape(8.dp)).background(if (i == ins.busiestWeekday) Pop.Coral else Pop.Lavender))
+                            Text(dayNames[i].take(1), fontSize = 11.sp, fontWeight = FontWeight.Black)
+                        }
+                    }
+                }
+            }
+
+            if (ins.topTitles.isNotEmpty()) NeoCard {
+                CardLabel("Where the money actually went")
+                ins.topTitles.forEachIndexed { i, (title, v) ->
+                    Row(Modifier.padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text("${i + 1}", Modifier.width(22.dp), fontWeight = FontWeight.Black, color = Pop.Forest)
+                        Text(title, Modifier.weight(1f), maxLines = 1)
+                        Text(m(v), fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+            WeeklySpendCard(workspace, month, privacy)
         }
     }
 }

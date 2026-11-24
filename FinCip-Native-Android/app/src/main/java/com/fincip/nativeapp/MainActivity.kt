@@ -312,7 +312,7 @@ private fun FinCipApp(store: FinanceStore, securePrefs: SecurePrefs) {
         taxDeduction = loadedTax.double("deductions").toString()
         taxStandardDeduction = loadedTax.double("standardDeduction", 75000.0).toString()
         taxAllowance = loadedTax.double("allowance").toString()
-        taxRate = loadedTax.double("effectiveRate", 20.0).toString()
+        taxRate = loadedTax.double("regionalRate", 0.0).toString()
         taxRegime = loadedTax.string("regime", "new")
         taxAgeGroup = loadedTax.string("ageGroup", "below60")
         taxResident = loadedTax.bool("resident", true)
@@ -342,7 +342,7 @@ private fun FinCipApp(store: FinanceStore, securePrefs: SecurePrefs) {
         taxDeduction = importedTax.double("deductions").toString()
         taxStandardDeduction = importedTax.double("standardDeduction", 75000.0).toString()
         taxAllowance = importedTax.double("allowance").toString()
-        taxRate = importedTax.double("effectiveRate", 20.0).toString()
+        taxRate = importedTax.double("regionalRate", 0.0).toString()
         taxRegime = importedTax.string("regime", "new")
         taxAgeGroup = importedTax.string("ageGroup", "below60")
         taxResident = importedTax.bool("resident", true)
@@ -385,6 +385,7 @@ private fun FinCipApp(store: FinanceStore, securePrefs: SecurePrefs) {
         formName = existing?.string("title", existing.string("name", existing.string("asset"))).orEmpty()
         formAmount = existing?.double("amount", existing.double("limit", existing.double("value")))?.takeIf { it > 0 }?.toString().orEmpty()
         formCategory = existing?.string("category", when (type) { "investment" -> "Stock"; "asset" -> "Asset"; "product" -> "SIP"; "rule" -> "Food"; else -> "Food" }) ?: when (type) { "investment" -> "Stock"; "asset" -> "Asset"; "product" -> "SIP"; else -> "Food" }
+        if (type == "goal" && existing == null) formCategory = "Other"
         formDate = existing?.string("date", existing.string("nextDate", isoToday())) ?: isoToday()
         formCurrency = existing?.string("currency", workspace.objectOrEmpty("settings").string("baseCurrency", "INR")) ?: workspace.objectOrEmpty("settings").string("baseCurrency", "INR")
         formType = existing?.string("type", if (type == "transaction") "expense" else "savings") ?: if (type == "transaction") "expense" else "savings"
@@ -812,7 +813,7 @@ private fun FinCipApp(store: FinanceStore, securePrefs: SecurePrefs) {
                             }
                             pendingExport = pack.toString(); exportJsonLauncher.launch("fincip-shared-budget-${isoToday()}.json")
                         }, { backupImportLauncher.launch(arrayOf("application/json", "text/*")) })
-                        "goals" -> GoalsScreen(workspace, privacy, { openForm("goal") }, { goal -> activeGoalId = goal.string("id"); openForm("contribution"); formName = goal.string("name") }, { deleteFromArray("goals", it.string("id")) }, { openForm("emergency", workspace.objectOrEmpty("emergencyFund")) })
+                        "goals" -> GoalsScreen(workspace, privacy, { openForm("goal") }, { goal -> activeGoalId = goal.string("id"); openForm("contribution"); formName = goal.string("name") }, { deleteFromArray("goals", it.string("id")) }, { openForm("emergency", workspace.objectOrEmpty("emergencyFund")) }, { openForm("goal", it) })
                         "networth" -> NetWorthScreen(workspace, privacy, { openForm("asset") }, { deleteFromArray("netWorthItems", it.string("id")) }, { openForm("asset", it) })
                         "simulator" -> SimulatorScreen(workspace)
                         "india" -> IndiaFinanceScreen(workspace, privacy, { openForm("product") }, { deleteFromArray("financeProducts", it.string("id")) }, { product -> activeProductId = product.string("id"); openForm("productContribution", product) }, { product -> openForm("product", product) })
@@ -829,12 +830,13 @@ private fun FinCipApp(store: FinanceStore, securePrefs: SecurePrefs) {
                                     tax.addProperty("country", taxCountry); tax.addProperty("currency", com.fincip.nativeapp.data.taxCurrency(taxCountry)); tax.addProperty("taxYear", taxYear)
                                     tax.addProperty("mode", "country"); tax.addProperty("income", taxIncome.toDoubleOrNull() ?: 0.0)
                                     tax.addProperty("deductions", taxDeduction.toDoubleOrNull() ?: 0.0); tax.addProperty("standardDeduction", taxStandardDeduction.toDoubleOrNull() ?: 0.0)
-                                    tax.addProperty("allowance", taxAllowance.toDoubleOrNull() ?: 0.0); tax.addProperty("effectiveRate", taxRate.toDoubleOrNull() ?: 0.0)
+                                    tax.addProperty("allowance", taxAllowance.toDoubleOrNull() ?: 0.0); tax.addProperty("regionalRate", taxRate.toDoubleOrNull() ?: 0.0)
                                     tax.addProperty("regime", taxRegime); tax.addProperty("ageGroup", taxAgeGroup); tax.addProperty("resident", taxResident)
                                     root.add("taxProfile", tax)
                                 }
                                 notify("Tax assumptions saved")
-                            }
+                            },
+                            workspace = workspace
                         )
                         "portfolio" -> PortfolioScreen(workspace, privacy, { openForm("investment") }, { deleteFromArray("investments", it.string("id")) })
                         "forecast" -> ForecastScreen(workspace, privacy)
@@ -1121,9 +1123,9 @@ private fun FinanceEntryDialog(
     extra: String, onExtra: (String) -> Unit, shared: Boolean, onShared: (Boolean) -> Unit,
     onSave: () -> Unit, onDismiss: () -> Unit, suggestions: com.fincip.nativeapp.ui.FormSuggestions = com.fincip.nativeapp.ui.FormSuggestions()
 ) {
-    val title = when (type) { "transaction" -> "Add transaction"; "budget" -> "Set budget"; "goal" -> "Create goal"; "contribution" -> "Add contribution"; "bill" -> "Add recurring bill"; "investment" -> "Add portfolio holding"; "asset" -> "Add net-worth item"; "product" -> "Add finance product"; "productContribution" -> "Record investment contribution"; "emergency" -> "Emergency fund settings"; "rule" -> "Add smart rule"; else -> "FinCip entry" }
+    val title = when (type) { "transaction" -> "Add transaction"; "budget" -> "Set budget"; "goal" -> "Goal or debt"; "contribution" -> "Add contribution"; "bill" -> "Add recurring bill"; "investment" -> "Add portfolio holding"; "asset" -> "Add net-worth item"; "product" -> "Add finance product"; "productContribution" -> "Record investment contribution"; "emergency" -> "Emergency fund settings"; "rule" -> "Add smart rule"; else -> "FinCip entry" }
     val hasAmount = type in listOf("contribution", "productContribution", "emergency", "transaction", "budget", "goal", "bill", "investment", "asset", "product")
-    val amountLabel = when (type) { "contribution", "productContribution" -> "Contribution amount"; "emergency" -> "Emergency fund balance"; "product" -> "Invested to date"; else -> "Amount / value" }
+    val amountLabel = when (type) { "contribution", "productContribution" -> "Contribution amount"; "emergency" -> "Emergency fund balance"; "goal" -> if (transactionType == "debt") "Total owed" else "Target amount"; "product" -> "Invested to date"; else -> "Amount / value" }
     val headerFill = when (type) {
         "transaction" -> if (transactionType == "income") Pop.Mint else Pop.Peach
         "budget" -> Pop.Lavender
@@ -1163,12 +1165,12 @@ private fun FinanceEntryDialog(
                         Spacer(Modifier.height(16.dp))
                         Text("${amountLabel.uppercase()} · $currency", style = MaterialTheme.typography.labelSmall, letterSpacing = 1.sp, fontWeight = FontWeight.Black, color = Pop.Ink.copy(alpha = .65f))
                         androidx.compose.foundation.text.BasicTextField(
-                            value = amount, onValueChange = onAmount, singleLine = true,
+                            value = if (type == "goal") target else amount, onValueChange = if (type == "goal") onTarget else onAmount, singleLine = true,
                             textStyle = androidx.compose.ui.text.TextStyle(fontSize = 46.sp, fontWeight = FontWeight.Black, color = Pop.Ink, fontFamily = com.fincip.nativeapp.ui.PopFont),
                             keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Decimal),
                             cursorBrush = androidx.compose.ui.graphics.SolidColor(Pop.Ink),
                             modifier = Modifier.fillMaxWidth(),
-                            decorationBox = { inner -> Box { if (amount.isEmpty()) Text("0", fontSize = 46.sp, fontWeight = FontWeight.Black, color = Pop.Ink.copy(alpha = .3f)); inner() } }
+                            decorationBox = { inner -> Box { if ((if (type == "goal") target else amount).isEmpty()) Text("0", fontSize = 46.sp, fontWeight = FontWeight.Black, color = Pop.Ink.copy(alpha = .3f)); inner() } }
                         )
                     }
                 }
@@ -1198,7 +1200,12 @@ private fun FinanceEntryDialog(
                         monthly = contribution, onMonthly = onContribution, rate = rate, onRate = onRate, start = date, onStart = onDate,
                         maturity = deadline, onMaturity = onDeadline, currency = currency, existingProviders = suggestions.providers
                     )
-                    if (type != "transaction" && type != "product") NeoCard {
+                    if (type == "goal") com.fincip.nativeapp.ui.GoalFormBody(
+                        debt = transactionType == "debt", purpose = category, onPurpose = onCategory, name = name, onName = onName, target = target,
+                        saved = saved, onSaved = onSaved, monthly = contribution, onMonthly = onContribution, rate = rate, onRate = onRate,
+                        deadline = deadline, onDeadline = onDeadline, currency = currency
+                    )
+                    if (type != "transaction" && type != "product" && type != "goal") NeoCard {
                         Text("DETAILS", style = MaterialTheme.typography.labelSmall, letterSpacing = 1.2.sp, fontWeight = FontWeight.Black, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .55f))
                         Spacer(Modifier.height(10.dp))
                         Column(verticalArrangement = fieldGap) {
