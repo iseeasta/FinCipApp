@@ -221,7 +221,7 @@ fun AnalyticsOverview(
         }
                 }
                 "balance" -> {
-        val balance = accountBalance(workspace)
+        val balance = com.fincip.nativeapp.data.accountBalance(workspace)
         Column {
             Text("Total balance", fontSize = 14.sp, color = scheme.onSurface.copy(alpha = .65f))
             Text(bigMoney(if (privacy) "••••••" else money(balance, base), 40, scheme.onSurface), maxLines = 1, overflow = TextOverflow.Clip)

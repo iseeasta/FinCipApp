@@ -755,7 +755,7 @@ private fun FinCipApp(store: FinanceStore, securePrefs: SecurePrefs) {
             val privacy = workspace.objectOrEmpty("settings").bool("privacyMode")
             val monthIncome = incomeTotal(workspace, month)
             val monthExpenses = expenseTotal(workspace, month)
-            val balance = accountBalance(workspace)
+            val balance = com.fincip.nativeapp.data.accountBalance(workspace)
             val savingsRate = if (monthIncome > 0) (monthIncome - monthExpenses) / monthIncome * 100 else 0.0
             val wide = LocalConfiguration.current.screenWidthDp >= 600
             val navPrefs = remember(workspace) { com.fincip.nativeapp.data.NavPrefs.fromJson(workspace.objectOrEmpty("settings").get("navPrefs")?.takeIf { it.isJsonObject }?.asJsonObject) }
