@@ -52,6 +52,7 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.ShowChart
 import androidx.compose.material.icons.filled.Timeline
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.Wallet
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.SwapHoriz
@@ -121,6 +122,7 @@ private fun pageIcon(id: String): ImageVector = when (id) {
     "household" -> Icons.Default.Groups
     "security" -> Icons.Default.Shield
     "settings" -> Icons.Default.Settings
+    "navstudio" -> Icons.Default.Tune
     else -> Icons.Default.Circle
 }
 
