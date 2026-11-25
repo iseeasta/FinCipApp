@@ -89,6 +89,11 @@ private fun ImportTab(
     val excluded = remember { mutableStateMapOf<Int, Boolean>() }
     val forced = remember { mutableStateMapOf<Int, Boolean>() }
     var source by remember { mutableStateOf("") }
+    var sheets by remember { mutableStateOf<List<com.fincip.nativeapp.data.SheetData>>(emptyList()) }
+    var sheetIdx by remember { mutableStateOf(0) }
+    var headerPick by remember { mutableStateOf(1) }
+    var xlsNotes by remember { mutableStateOf<List<String>>(emptyList()) }
+    var xlsFailed by remember { mutableStateOf(false) }
 
     val existing = remember(workspace) {
         val txs = transactions(workspace)
@@ -108,6 +113,22 @@ private fun ImportTab(
         }
     }
 
+    fun loadSheet(list: List<com.fincip.nativeapp.data.SheetData>, idx: Int, manualHeader: Int?, label: String) {
+        val sh = list[idx]
+        val t = if (manualHeader != null) com.fincip.nativeapp.data.SheetTable.extractAt(sh.grid, manualHeader - 1) else com.fincip.nativeapp.data.SheetTable.find(sh.grid)
+        if (t == null) {
+            xlsFailed = true; preview = null; xlsNotes = emptyList()
+            headerPick = (sh.grid.indexOfFirst { r -> r.count { it.isNotBlank() } >= 2 } + 1).coerceAtLeast(1)
+            return
+        }
+        xlsFailed = false; headerPick = t.headerRow + 1
+        xlsNotes = listOf("Found the table on sheet “${sh.name}”, header on row ${t.headerRow + 1}, starting at column ${colName(t.firstCol)}. ${t.rows.size} rows read.") + t.notes
+        fileName = "$label · ${sh.name}"
+        val csv = com.fincip.nativeapp.data.SheetTable.toCsv(t)
+        text = csv
+        runParse(csv)
+    }
+
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
         if (uri == null) return@rememberLauncherForActivityResult
         result = null; preview = null
@@ -117,11 +138,30 @@ private fun ImportTab(
                 runCatching {
                     val name = context.contentResolver.query(uri, null, null, null, null)?.use { c -> val i = c.getColumnIndex(OpenableColumns.DISPLAY_NAME); if (c.moveToFirst() && i >= 0) c.getString(i) else null } ?: "statement.csv"
                     val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: ByteArray(0)
-                    name to Csv.decode(bytes)
+                    val book = com.fincip.nativeapp.data.SheetReader.read(bytes)
+                    if (book != null) name to book
+                    else {
+                        val decoded = Csv.decode(bytes)
+                        val html = if (name.endsWith(".xls", true) || name.endsWith(".html", true) || name.endsWith(".htm", true)) com.fincip.nativeapp.data.SheetReader.readHtmlTable(decoded) else null
+                        if (html != null) name to listOf(html) else name to decoded
+                    }
                 }
             }
-            val pair = read.getOrNull()
-            if (pair == null || pair.second.isBlank()) { busy = false; notify("Could not read that file."); return@launch }
+            val got = read.getOrNull()
+            if (got != null && got.second is List<*>) {
+                @Suppress("UNCHECKED_CAST") val list = got.second as List<com.fincip.nativeapp.data.SheetData>
+                if (list.isEmpty()) { busy = false; notify("That workbook has no readable sheets."); return@launch }
+                sheets = list
+                // pick the sheet whose table scores best
+                val best = withContext(Dispatchers.Default) { list.indices.maxByOrNull { com.fincip.nativeapp.data.SheetTable.find(list[it].grid)?.score ?: -1 } ?: 0 }
+                sheetIdx = best
+                busy = false
+                loadSheet(list, best, null, got.first)
+                return@launch
+            }
+            sheets = emptyList(); xlsNotes = emptyList(); xlsFailed = false
+            val pair = got?.let { it.first to (it.second as? String ?: "") }
+            if (pair == null || pair.second.isBlank()) { busy = false; notify("Could not read that file. If it is an old .xls, try Save As .xlsx or CSV in Excel."); return@launch }
             if (pair.second.trimStart().let { it.startsWith("OFXHEADER") || it.contains("<OFX>", true) }) { busy = false; notify(if (onLegacyText(pair.second)) "OFX statement imported" else "No transactions found in the OFX file"); return@launch }
             fileName = pair.first; text = pair.second
             runParse(pair.second)
@@ -142,7 +182,25 @@ private fun ImportTab(
             Spacer(Modifier.height(10.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 NeoOutlineButton("Undo this import", { onUndo(r.batchId); result = null; notify("Import undone — ${r.count} transactions removed") }, Modifier.weight(1f))
-                NeoButton("Import another", Modifier.weight(1f), onClick = { result = null; preview = null })
+                NeoButton("Import another", Modifier.weight(1f), onClick = { result = null; preview = null; sheets = emptyList(); xlsNotes = emptyList(); xlsFailed = false })
+            }
+        }
+    }
+
+    if (result == null && sheets.isNotEmpty()) {
+        NeoCard {
+            Text("Excel sheet", fontWeight = FontWeight.Black)
+            if (sheets.size > 1) Row(Modifier.horizontalScroll(rememberScrollState()).padding(top = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                sheets.forEachIndexed { i, sh -> PopChip(sh.name.ifBlank { "Sheet ${i + 1}" }, i == sheetIdx, { sheetIdx = i; loadSheet(sheets, i, null, fileName.substringBefore(" · ")) }) }
+            }
+            if (xlsFailed) Text("Could not find a transaction table automatically. Pick the row that holds the column titles (Date, Narration, Debit…).", fontSize = 13.sp, color = Pop.Coral, modifier = Modifier.padding(top = 8.dp))
+            else xlsNotes.forEach { Text(it, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .75f), modifier = Modifier.padding(top = 4.dp)) }
+            Row(Modifier.padding(top = 10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Header row", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                PopChip("−", false, { headerPick = (headerPick - 1).coerceAtLeast(1) })
+                Text("$headerPick", fontWeight = FontWeight.Black)
+                PopChip("+", false, { headerPick += 1 })
+                PopChip("Read again", false, { loadSheet(sheets, sheetIdx, headerPick, fileName.substringBefore(" · ")) })
             }
         }
     }
@@ -153,7 +211,11 @@ private fun ImportTab(
             Text("Choose a file", fontWeight = FontWeight.Black, fontSize = 18.sp)
             Text("CSV or TSV from PhonePe, Google Pay, Paytm, BHIM, your bank, a credit card, Excel/Sheets or another expense tracker. Columns are detected automatically and you review everything before it is saved.", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .7f))
             Spacer(Modifier.height(10.dp))
-            NeoButton(if (busy) "Reading…" else "Select CSV file", Modifier.fillMaxWidth(), onClick = { picker.launch(arrayOf("*/*")) }, enabled = !busy)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                NeoButton(if (busy) "Reading…" else "Select CSV file", Modifier.weight(1f), onClick = { picker.launch(arrayOf("*/*")) }, enabled = !busy)
+                NeoButton(if (busy) "Reading…" else "Select XLS file", Modifier.weight(1f), onClick = { picker.launch(arrayOf("application/vnd.ms-excel", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "application/octet-stream", "*/*")) }, enabled = !busy)
+            }
+            Text("Excel statements (.xls, .xlsx) work even when the table starts far from the top-left corner.", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .6f), modifier = Modifier.padding(top = 6.dp))
             if (busy) { Spacer(Modifier.height(10.dp)); ProgressLine(progress) }
         }
         Text("Tip: download the statement from the other app first (UPI apps and banks offer this under Statements/Reports).", fontSize = 12.sp, color = MaterialTheme.colorScheme.onBackground.copy(alpha = .6f))
@@ -224,7 +286,7 @@ private fun ImportTab(
         if (shown.size > limit) Text("Showing the first $limit of ${shown.size}. Rows not shown are imported exactly as detected.", fontSize = 12.sp, color = MaterialTheme.colorScheme.onBackground.copy(alpha = .6f))
 
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            NeoOutlineButton("Cancel", { preview = null; text = "" }, Modifier.weight(1f))
+            NeoOutlineButton("Cancel", { preview = null; text = ""; sheets = emptyList(); xlsNotes = emptyList(); xlsFailed = false }, Modifier.weight(1f))
             NeoButton("Import ${included.size}", Modifier.weight(1f), enabled = included.isNotEmpty() && !busy, onClick = {
                 busy = true
                 scope.launch {
@@ -558,3 +620,5 @@ private fun PreviewLine(k: String, v: String) {
         Text(k, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .65f)); Text(v, fontSize = 13.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(start = 12.dp), maxLines = 2, overflow = TextOverflow.Ellipsis)
     }
 }
+
+private fun colName(i: Int): String { var n = i + 1; val sb = StringBuilder(); while (n > 0) { val r = (n - 1) % 26; sb.insert(0, ('A' + r)); n = (n - 1) / 26 }; return sb.toString() }

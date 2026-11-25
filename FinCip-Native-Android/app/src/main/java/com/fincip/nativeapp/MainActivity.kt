@@ -763,6 +763,31 @@ private fun FinCipApp(store: FinanceStore, securePrefs: SecurePrefs) {
             val corner by animateDpAsState(if (sidebarExpanded && !wide) 28.dp else 0.dp, tween(300), label = "corner")
             val isPersonal = page.substringBefore(":") in setOf("profile", "settings", "security", "customize")
             fun toggleSidebar() { sidebarExpanded = !sidebarExpanded; if (wide) context.getSharedPreferences("fincip_ui", 0).edit().putBoolean("sidebar_expanded", sidebarExpanded).apply() }
+            // ---- Back navigation: history stack built from page changes (screens set `page` directly in many places)
+            val pageStack = remember { androidx.compose.runtime.mutableStateListOf<String>() }
+            var lastPage by remember { mutableStateOf(page) }
+            var poppingBack by remember { mutableStateOf(false) }
+            var lastBackAt by remember { mutableStateOf(0L) }
+            androidx.compose.runtime.LaunchedEffect(page) {
+                if (poppingBack) poppingBack = false
+                else if (page != lastPage) {
+                    pageStack.removeAll { it == lastPage || it == page }
+                    pageStack.add(lastPage)
+                    while (pageStack.size > 30) pageStack.removeAt(0)
+                }
+                lastPage = page
+            }
+            // Root exit: second Back within 2 seconds closes the app
+            androidx.activity.compose.BackHandler(enabled = page == "overview" && pageStack.isEmpty()) {
+                val now = android.os.SystemClock.elapsedRealtime()
+                if (now - lastBackAt < 2000) (context as? Activity)?.finish() else { lastBackAt = now; android.widget.Toast.makeText(context, "Press back again to exit", android.widget.Toast.LENGTH_SHORT).show() }
+            }
+            androidx.activity.compose.BackHandler(enabled = page != "overview" || pageStack.isNotEmpty()) {
+                val prev = pageStack.removeLastOrNull() ?: "overview"
+                poppingBack = true
+                NAV_PAGES.firstOrNull { it.id == prev.substringBefore(":") }?.let { group = it.group }
+                page = prev
+            }
             androidx.activity.compose.BackHandler(enabled = !wide && sidebarExpanded) { sidebarExpanded = false }
             val glowA = MaterialTheme.colorScheme.primary
             val glowB = MaterialTheme.colorScheme.tertiary

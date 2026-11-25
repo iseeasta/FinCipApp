@@ -56,6 +56,7 @@ dependencies {
     implementation("androidx.work:work-runtime-ktx:2.12.0")
     implementation("com.google.code.gson:gson:2.13.2")
     implementation("com.google.zxing:core:3.5.3")
+    implementation("net.sourceforge.jexcelapi:jxl:2.6.12")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
