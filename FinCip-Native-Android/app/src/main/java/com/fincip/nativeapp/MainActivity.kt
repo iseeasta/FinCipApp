@@ -755,7 +755,7 @@ private fun FinCipApp(store: FinanceStore, securePrefs: SecurePrefs) {
             val privacy = workspace.objectOrEmpty("settings").bool("privacyMode")
             val monthIncome = incomeTotal(workspace, month)
             val monthExpenses = expenseTotal(workspace, month)
-            val balance = incomeTotal(workspace) - expenseTotal(workspace)
+            val balance = accountBalance(workspace)
             val savingsRate = if (monthIncome > 0) (monthIncome - monthExpenses) / monthIncome * 100 else 0.0
             val wide = LocalConfiguration.current.screenWidthDp >= 600
             val navPrefs = remember(workspace) { com.fincip.nativeapp.data.NavPrefs.fromJson(workspace.objectOrEmpty("settings").get("navPrefs")?.takeIf { it.isJsonObject }?.asJsonObject) }
@@ -844,7 +844,7 @@ private fun FinCipApp(store: FinanceStore, securePrefs: SecurePrefs) {
                     AnimatedContent(targetState = page, transitionSpec = { (fadeIn(tween(240, delayMillis = 70)) + slideInVertically(tween(280)) { it / 18 }) togetherWith fadeOut(tween(120)) }, label = "page") { currentPage ->
                     when (currentPage.substringBefore(":")) {
                         "overview" -> OverviewScreen(workspace, month, privacy, savingsRate, balance, onAdd = { openForm("transaction") }, onMascot = { page = "customize" }, onOpen = { id -> NAV_PAGES.firstOrNull { it.id == id }?.let { group = it.group; page = it.id } }, onNewGoal = { openForm("goal") }, onEditTx = { openForm("transaction", it) }, onWidgets = { ids -> updateWorkspace { root -> val st = root.objectOrEmpty("settings"); st.add("homeWidgets", com.google.gson.JsonArray().also { a -> ids.forEach { a.add(it) } }); root.add("settings", st) } })
-                        "dataio" -> com.fincip.nativeapp.ui.DataIOScreen(workspace, ::importBatch, ::undoBatch, { m -> month = m; page = "transactions" }, { pendingExport = workspace.toString(); exportJsonLauncher.launch("FinCip-backup.json") }, ::importLegacyText, ::notify)
+                        "dataio" -> com.fincip.nativeapp.ui.DataIOScreen(workspace, ::importBatch, ::undoBatch, { m -> month = m; page = "transactions" }, { pendingExport = workspace.toString(); exportJsonLauncher.launch("FinCip-backup.json") }, ::importLegacyText, ::notify, { v -> updateWorkspace { root -> val st = root.objectOrEmpty("settings"); st.addProperty("openingBalance", v); root.add("settings", st) }; notify("Starting balance saved") })
                         "transactions" -> TransactionsScreen(workspace, month, privacy, transactionQuery, { transactionQuery = it }, { openForm("transaction") }, { openForm("transaction", it) }, { deleteFromArray("transactions", it.string("id")) }, { page = "dataio" }, { page = "dataio" })
                         "recurring" -> RecurringScreen(workspace, privacy, { openForm("bill") }, { deleteFromArray("recurringRules", it.string("id")) }, { markRecurringPaid(it) })
                         "calendar" -> CalendarScreen(workspace, month, { month = it })

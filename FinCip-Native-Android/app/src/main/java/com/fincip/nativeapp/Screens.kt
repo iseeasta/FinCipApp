@@ -1466,7 +1466,7 @@ fun PortfolioScreen(workspace: JsonObject, privacy: Boolean, onAdd: () -> Unit, 
 @Composable
 fun ForecastScreen(workspace: JsonObject, privacy: Boolean) {
     val base = workspace.objectOrEmpty("settings").string("baseCurrency", "INR")
-    val balance = incomeTotal(workspace) - expenseTotal(workspace)
+    val balance = accountBalance(workspace)
     val rules = workspace.arrayOrEmpty("recurringRules").objects()
     val recurringIncome = rules.filter { it.string("type") == "income" }.sumOf { toBase(workspace, it.double("amount"), it.string("currency", base)) }
     val recurringExpenses = rules.filter { com.fincip.nativeapp.data.isSpend(it) }.sumOf { toBase(workspace, it.double("amount"), it.string("currency", base)) }

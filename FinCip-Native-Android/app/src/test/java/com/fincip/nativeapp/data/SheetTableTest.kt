@@ -30,6 +30,8 @@ class SheetTableTest {
         assertEquals("UPI-SWIGGY", t.rows[0][1]); assertEquals("50,000.00", t.rows[1][3]); assertEquals("57,750.00", t.rows[2][4])
     }
 
+    @Test fun openingBalanceFromRunningBalance() { assertEquals(10000.0, SheetTable.find(grid(0, 0, std))!!.openingBalance!!, 0.001) }
+    @Test fun openingBalanceWhenNewestFirst() { val rev = listOf(std[0]) + std.drop(1).reversed(); assertEquals(10000.0, SheetTable.find(grid(0, 0, rev))!!.openingBalance!!, 0.001) }
     @Test fun startsAtA1() = check(SheetTable.find(grid(0, 0, std)))
     @Test fun startsAtO15() = check(SheetTable.find(grid(14, 14, std, List(14) { "Account info $it" })))
     @Test fun startsAtAA20() = check(SheetTable.find(grid(19, 26, std, List(19) { "Name: X $it" })))

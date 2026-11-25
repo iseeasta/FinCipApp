@@ -54,7 +54,8 @@ fun DataIOScreen(
     onShowMonth: (String) -> Unit,
     onExportJson: () -> Unit,
     onLegacyText: (String) -> Boolean,
-    notify: (String) -> Unit
+    notify: (String) -> Unit,
+    onSetOpening: (Double) -> Unit = {}
 ) {
     var tab by rememberSaveable { mutableIntStateOf(0) }
     Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 28.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
@@ -62,7 +63,27 @@ fun DataIOScreen(
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             PopChip("Import", tab == 0, { tab = 0 }); PopChip("Export", tab == 1, { tab = 1 })
         }
-        if (tab == 0) ImportTab(workspace, onImport, onUndo, onShowMonth, onLegacyText, notify) else ExportTab(workspace, onExportJson, notify)
+        if (tab == 0) {
+            var detected by remember { mutableStateOf<Double?>(null) }
+            OpeningCard(workspace, detected, onSetOpening)
+            ImportTab(workspace, onImport, onUndo, onShowMonth, onLegacyText, notify) { detected = it }
+        } else ExportTab(workspace, onExportJson, notify)
+    }
+}
+
+@Composable
+private fun OpeningCard(workspace: JsonObject, detected: Double?, onSet: (Double) -> Unit) {
+    val cur = com.fincip.nativeapp.data.openingBalance(workspace)
+    var field by remember(cur, detected) { mutableStateOf(if (detected != null) "%.2f".format(detected) else if (cur != 0.0) "%.2f".format(cur) else "") }
+    NeoCard {
+        Text("Starting balance", fontWeight = FontWeight.Black)
+        Text("Your total balance is starting balance + income − spending. Statements only show what moved, so tell the app what you already had before your first entry.", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .75f), modifier = Modifier.padding(top = 4.dp))
+        if (detected != null) Text("This statement opens at ₹${"%,.2f".format(detected)} (worked out from its running balance). Use the earliest statement you have.", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Pop.Forest, modifier = Modifier.padding(top = 6.dp))
+        Row(Modifier.padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedTextField(field, { field = it.filter { c -> c.isDigit() || c == '.' || c == '-' } }, Modifier.weight(1f), singleLine = true, label = { Text("Amount (base currency)") }, keyboardOptions = KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Decimal))
+            NeoButton("Save", onClick = { onSet(field.toDoubleOrNull() ?: 0.0) })
+        }
+        if (cur != 0.0) Text("Currently set: ₹${"%,.2f".format(cur)}", fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp))
     }
 }
 
@@ -73,7 +94,7 @@ private class ImportDone(val batchId: String, val count: Int, val duplicatesSkip
 @Composable
 private fun ImportTab(
     workspace: JsonObject, onImport: (List<JsonObject>, JsonObject) -> Boolean, onUndo: (String) -> Unit,
-    onShowMonth: (String) -> Unit, onLegacyText: (String) -> Boolean, notify: (String) -> Unit
+    onShowMonth: (String) -> Unit, onLegacyText: (String) -> Boolean, notify: (String) -> Unit, onOpening: (Double?) -> Unit = {}
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -124,6 +145,7 @@ private fun ImportTab(
         xlsFailed = false; headerPick = t.headerRow + 1
         xlsNotes = listOf("Found the table on sheet “${sh.name}”, header on row ${t.headerRow + 1}, starting at column ${colName(t.firstCol)}. ${t.rows.size} rows read.") + t.notes
         fileName = "$label · ${sh.name}"
+        onOpening(t.openingBalance)
         val csv = com.fincip.nativeapp.data.SheetTable.toCsv(t)
         text = csv
         runParse(csv)

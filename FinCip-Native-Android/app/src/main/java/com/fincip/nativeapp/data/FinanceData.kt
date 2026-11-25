@@ -121,6 +121,10 @@ fun expenseTotal(workspace: JsonObject, month: String? = null): Double {
     val refunded = rows.filter { it.string("type") == "refund" }.sumOf { toBase(workspace, it.double("amount"), it.string("currency", "INR")) }
     return spent - refunded
 }
+/** Money you already had before your first logged transaction (set from a bank statement or by hand). */
+fun openingBalance(workspace: JsonObject): Double = workspace.objectOrEmpty("settings").double("openingBalance")
+/** What is actually in your accounts: starting balance + income - spending. */
+fun accountBalance(workspace: JsonObject): Double = openingBalance(workspace) + incomeTotal(workspace) - expenseTotal(workspace)
 fun normalizeTaxCountry(value: String): String = when (value.trim().uppercase(Locale.ROOT)) {
     "IN", "INDIA" -> "IN"
     "US", "USA", "UNITED STATES" -> "US"

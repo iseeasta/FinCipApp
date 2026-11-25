@@ -3,7 +3,7 @@ package com.fincip.nativeapp.data
 /** Rule-based discovery of a transaction table inside an arbitrary worksheet grid. No AI, no network, no Android deps. */
 class TableFound(
     val headerRow: Int, val firstCol: Int, val headers: List<String>, val rows: List<List<String>>,
-    val notes: List<String>, val score: Int
+    val notes: List<String>, val score: Int, val openingBalance: Double? = null
 )
 
 object SheetTable {
@@ -209,6 +209,7 @@ object SheetTable {
                 if (ambiguous > 0) notes.add("$ambiguous rows had no clear Dr/Cr, so they are left for you to review.")
             } else if (explicit == 0) notes.add("One amount column without Dr/Cr or signs: direction cannot be inferred, please check the preview.")
         }
+        var opening: Double? = null
         // Balance reconciliation, a sanity check only
         val iBal = idx(Role.BALANCE); val nd = names.indexOf("Debit"); val nc = names.indexOf("Credit")
         if (iBal >= 0 && nd >= 0 && nc >= 0) {
@@ -224,9 +225,14 @@ object SheetTable {
             }
             val fwd = reconciles(rows); val rev = reconciles(rows.reversed())
             val best = if (rev.first > fwd.first) rev else fwd
+            if (best.second >= 2 && best.first * 10 >= best.second * 9) {
+                val chrono = if (rev.first > fwd.first) rows.reversed() else rows
+                val f0 = chrono.firstOrNull(); val b0 = f0?.let { amountOf(it[iBal]) }
+                if (f0 != null && b0 != null) opening = Math.round((b0 + (amountOf(f0[nd]) ?: 0.0) - (amountOf(f0[nc]) ?: 0.0)) * 100.0) / 100.0
+            }
             if (best.second >= 2) notes.add(if (best.first * 10 >= best.second * 9) "Running balance matches on ${best.first} of ${best.second} rows." else "Running balance only matches on ${best.first} of ${best.second} rows. Check the debit/credit columns.")
         }
-        return TableFound(headerRow, cols.first(), names, rows, notes, score)
+        return TableFound(headerRow, cols.first(), names, rows, notes, score, opening)
     }
 
     private fun cleanNum(v: Double): String = if (v % 1.0 == 0.0 && v < 1e15) v.toLong().toString() else java.math.BigDecimal(v).setScale(2, java.math.RoundingMode.HALF_UP).toPlainString()
