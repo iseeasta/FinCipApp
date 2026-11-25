@@ -48,7 +48,6 @@ val NAV_PAGES = listOf(
     NavPage("receipts", "Receipt vault", "Explore", "▣"),
     NavPage("household", "Household & sync", "Explore", "♧"),
     NavPage("security", "Privacy & backups", "Explore", "⬡"),
-    NavPage("navstudio", "Navigation studio", "Explore", "☰"),
     NavPage("settings", "Settings & vibe", "Explore", "⚙"),
 )
 

@@ -104,6 +104,7 @@ fun ProfileHub(
     onBlockScreens: (Boolean) -> Unit,
     vibe: String, onVibe: (String) -> Unit, dark: Boolean, onDark: (Boolean) -> Unit, soundOn: Boolean,
     onNavigate: (String) -> Unit = {}, settingsStart: String = "",
+    navContent: @Composable () -> Unit = {},
     settingsContent: @Composable (String) -> Unit,
     securityContent: @Composable () -> Unit
 ) {
@@ -113,7 +114,7 @@ fun ProfileHub(
                 0 -> ProfilePage(workspace, onProfileChange, onNavigate)
                 1 -> SettingsTab(workspace, vibe, onVibe, dark, onDark, accent, soundOn, { onNavigate("profile") }, { onNavigate("security") }, { onNavigate("customize") }, settingsStart.ifBlank { null }, settingsContent)
                 2 -> { BackRow("Privacy & security") { onNavigate("settings") }; LockCard(onBlockScreens); securityContent() }
-                else -> { BackRow("Customization") { onNavigate("settings") }; CustomizationTab(workspace, onPetChange, accent, onAccent, appIcon, onAppIcon) }
+                else -> { BackRow("Customization") { onNavigate("settings") }; navContent(); CustomizationTab(workspace, onPetChange, accent, onAccent, appIcon, onAppIcon) }
             }
         }
     }

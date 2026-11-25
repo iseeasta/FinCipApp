@@ -52,7 +52,8 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.ShowChart
 import androidx.compose.material.icons.filled.Timeline
-import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Wallet
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.SwapHoriz
@@ -93,14 +94,15 @@ import androidx.compose.ui.draw.rotate
 
 val SidebarWidth = 288.dp
 
-private fun groupIcon(group: String): ImageVector = when (group) {
+fun groupIcon(group: String): ImageVector = when (group) {
     "Home" -> Icons.Default.Home
     "Money" -> Icons.Default.Wallet
     "Plan" -> Icons.Default.Flag
+    "You" -> Icons.Default.Person
     else -> Icons.Default.Explore
 }
 
-private fun pageIcon(id: String): ImageVector = when (id) {
+fun pageIcon(id: String): ImageVector = when (id) {
     "overview" -> Icons.Default.Dashboard
     "transactions" -> Icons.Default.History
     "dataio" -> Icons.Default.SwapHoriz
@@ -122,7 +124,8 @@ private fun pageIcon(id: String): ImageVector = when (id) {
     "household" -> Icons.Default.Groups
     "security" -> Icons.Default.Shield
     "settings" -> Icons.Default.Settings
-    "navstudio" -> Icons.Default.Tune
+    "profile" -> Icons.Default.Person
+    "customize" -> Icons.Default.Palette
     else -> Icons.Default.Circle
 }
 

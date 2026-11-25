@@ -37,6 +37,7 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.togetherWith
 import com.fincip.nativeapp.ui.Feedback
 import com.fincip.nativeapp.ui.LockScreen
+import com.fincip.nativeapp.data.NavDests
 import com.fincip.nativeapp.data.AppIcons
 import com.fincip.nativeapp.data.AppLock
 import androidx.compose.animation.animateColorAsState
@@ -758,19 +759,18 @@ private fun FinCipApp(store: FinanceStore, securePrefs: SecurePrefs) {
             val savingsRate = if (monthIncome > 0) (monthIncome - monthExpenses) / monthIncome * 100 else 0.0
             val wide = LocalConfiguration.current.screenWidthDp >= 600
             val navPrefs = remember(workspace) { com.fincip.nativeapp.data.NavPrefs.fromJson(workspace.objectOrEmpty("settings").get("navPrefs")?.takeIf { it.isJsonObject }?.asJsonObject) }
-            val navEff = navPrefs.fitted(LocalConfiguration.current.screenWidthDp, com.fincip.nativeapp.data.NavPrefs.DEFAULT_ITEMS).first
-            var railExpanded by remember { mutableStateOf(false) }
-            val drawerPushes = !wide || navPrefs.isDefaultDrawer
+            val navState = com.fincip.nativeapp.ui.rememberNavState()
             androidx.compose.runtime.LaunchedEffect(navPrefs.isDefaultDrawer) {
                 sidebarExpanded = if (navPrefs.isDefaultDrawer) (wide && context.getSharedPreferences("fincip_ui", 0).getBoolean("sidebar_expanded", true)) else false
+                navState.closeAll()
             }
-            fun navSelect(id: String) {
-                if (id == com.fincip.nativeapp.data.NavItems.MORE) { sidebarExpanded = !sidebarExpanded; return }
-                NAV_PAGES.firstOrNull { it.id == id }?.let { group = it.group }
+            fun navGo(id: String) {
+                navState.closeAll()
+                NavDests.all.firstOrNull { it.id == id }?.let { group = it.group }
                 page = id
             }
             val sbW = if (wide) SidebarWidth else minOf(SidebarWidth, (LocalConfiguration.current.screenWidthDp * 0.78f).dp)
-            val pushW by animateDpAsState(if (sidebarExpanded && drawerPushes) sbW else 0.dp, tween(300, easing = FastOutSlowInEasing), label = "pushW")
+            val pushW by animateDpAsState(if (sidebarExpanded) sbW else 0.dp, tween(300, easing = FastOutSlowInEasing), label = "pushW")
             val sidebarX by animateDpAsState(if (sidebarExpanded) 0.dp else -sbW - 24.dp, tween(300, easing = FastOutSlowInEasing), label = "sidebarX")
             val corner by animateDpAsState(if (sidebarExpanded && !wide) 28.dp else 0.dp, tween(300), label = "corner")
             val isPersonal = page.substringBefore(":") in setOf("profile", "settings", "security", "customize")
@@ -800,13 +800,15 @@ private fun FinCipApp(store: FinanceStore, securePrefs: SecurePrefs) {
                 NAV_PAGES.firstOrNull { it.id == prev.substringBefore(":") }?.let { group = it.group }
                 page = prev
             }
-            androidx.activity.compose.BackHandler(enabled = (!wide || !navPrefs.isDefaultDrawer) && sidebarExpanded) { sidebarExpanded = false }
+            androidx.activity.compose.BackHandler(enabled = !wide && sidebarExpanded) { sidebarExpanded = false }
+            // any open menu (sheet, flyout, fan, search, full-screen menu) closes before the page changes
+            androidx.activity.compose.BackHandler(enabled = navState.anyOpen) { navState.closeAll() }
             val glowA = MaterialTheme.colorScheme.primary
             val glowB = MaterialTheme.colorScheme.tertiary
             Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).background(androidx.compose.ui.graphics.Brush.radialGradient(listOf(glowA.copy(alpha = .38f), Color.Transparent), center = androidx.compose.ui.geometry.Offset(120f, 300f), radius = 900f)).background(androidx.compose.ui.graphics.Brush.radialGradient(listOf(glowB.copy(alpha = .30f), Color.Transparent), center = androidx.compose.ui.geometry.Offset(200f, 2200f), radius = 1000f))) {
               Row(Modifier.fillMaxSize()) {
                 Spacer(Modifier.width(if (wide) pushW else 0.dp))
-                if (navEff.position == "left" && !navEff.isDefaultDrawer) com.fincip.nativeapp.ui.NavBarView(navEff, com.fincip.nativeapp.data.NavItems.activeFor(page), ::navSelect, Modifier.statusBarsPadding().navigationBarsPadding(), railExpanded, { railExpanded = !railExpanded })
+                com.fincip.nativeapp.ui.NavSide(navPrefs, page, ::navGo, navState, Modifier.statusBarsPadding().navigationBarsPadding())
                 Box(Modifier.weight(1f).then(if (!wide) Modifier.offset(x = pushW).clip(RoundedCornerShape(topStart = corner, bottomStart = corner)) else Modifier)) {
             Scaffold(
                 containerColor = MaterialTheme.colorScheme.background,
@@ -817,15 +819,17 @@ private fun FinCipApp(store: FinanceStore, securePrefs: SecurePrefs) {
                         Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        IconButton(modifier = Modifier.size(42.dp).background(MaterialTheme.colorScheme.surface, CircleShape), onClick = { toggleSidebar() }) { Icon(androidx.compose.material.icons.Icons.Default.Menu, contentDescription = "Open menu") }
-                        FinCipMark(Modifier.clip(RoundedCornerShape(10.dp)).clickable(onClickLabel = "Show sidebar") { toggleSidebar() }, size = 34.dp)
+                        if (navPrefs.layout == "drawer" || navPrefs.layout == "overlay") IconButton(modifier = Modifier.size(42.dp).background(MaterialTheme.colorScheme.surface, CircleShape), onClick = { if (navPrefs.isDefaultDrawer) toggleSidebar() else { val o = navState.menuOpen; navState.closeAll(); navState.menuOpen = !o } }) { Icon(androidx.compose.material.icons.Icons.Default.Menu, contentDescription = "Open menu") }
+                        if (navPrefs.isDefaultDrawer) FinCipMark(Modifier.clip(RoundedCornerShape(10.dp)).clickable(onClickLabel = "Show sidebar") { toggleSidebar() }, size = 34.dp)
+                        else FinCipMark(Modifier.clip(RoundedCornerShape(10.dp)), size = 34.dp)
                         Column(Modifier.weight(1f).padding(start = 4.dp)) {
                             Text(when (page.substringBefore(":")) { "profile" -> "Profile"; "settings" -> "Settings"; "security" -> "Privacy & security"; "customize" -> "Customization"; else -> null } ?: (NAV_PAGES.firstOrNull { it.id == page }?.title ?: "FinCip"), fontWeight = FontWeight.Black, fontSize = 22.sp, letterSpacing = (-0.5).sp, maxLines = 1)
                             Text(LocalDate.now().format(DateTimeFormatter.ofPattern("EEE, d MMM", Locale.ENGLISH)).uppercase(), style = MaterialTheme.typography.labelSmall, letterSpacing = 1.2.sp, color = MaterialTheme.colorScheme.onBackground.copy(alpha = .6f), maxLines = 1)
                         }
+                        if (!navPrefs.isDefaultDrawer) IconButton(modifier = Modifier.size(42.dp).background(MaterialTheme.colorScheme.surface, CircleShape), onClick = { startVoice() }) { Icon(androidx.compose.material.icons.Icons.Default.Mic, contentDescription = "Voice entry", modifier = Modifier.size(20.dp)) }
                         IconButton(modifier = Modifier.size(42.dp).background(MaterialTheme.colorScheme.surface, CircleShape), onClick = { updateWorkspace { root -> val settings = root.objectOrEmpty("settings"); settings.addProperty("privacyMode", !settings.bool("privacyMode")); root.add("settings", settings) } }) { Icon(if (privacy) Icons.Default.VisibilityOff else Icons.Default.Visibility, contentDescription = "Toggle privacy", modifier = Modifier.size(20.dp)) }
                     }
-                    if (navEff.position == "top") com.fincip.nativeapp.ui.NavBarView(navEff, com.fincip.nativeapp.data.NavItems.activeFor(page), ::navSelect)
+                    com.fincip.nativeapp.ui.NavTop(navPrefs, page, ::navGo, navState)
                     if (!isPersonal) Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                         MonthMenu(month, transactions(workspace).map { it.string("date").take(7) }.toSet()) { month = it }
                     }
@@ -833,20 +837,13 @@ private fun FinCipApp(store: FinanceStore, securePrefs: SecurePrefs) {
                 }
                 ,
                 bottomBar = {
-                    if (navEff.position == "bottom" || navEff.position == "dock") com.fincip.nativeapp.ui.NavBarView(navEff, com.fincip.nativeapp.data.NavItems.activeFor(page), ::navSelect, Modifier.navigationBarsPadding())
+                    com.fincip.nativeapp.ui.NavBottom(navPrefs, page, ::navGo, navState, Modifier.navigationBarsPadding())
                 }
             ) { innerPadding ->
-                Column(Modifier.fillMaxSize().padding(innerPadding).then(if (navEff.position == "bottom" || navEff.position == "dock") Modifier else Modifier.navigationBarsPadding())) {
+                Column(Modifier.fillMaxSize().padding(innerPadding).then(if (navPrefs.region == "bottom") Modifier else Modifier.navigationBarsPadding())) {
                     AnimatedContent(targetState = page, transitionSpec = { (fadeIn(tween(240, delayMillis = 70)) + slideInVertically(tween(280)) { it / 18 }) togetherWith fadeOut(tween(120)) }, label = "page") { currentPage ->
                     when (currentPage.substringBefore(":")) {
                         "overview" -> OverviewScreen(workspace, month, privacy, savingsRate, balance, onAdd = { openForm("transaction") }, onMascot = { page = "customize" }, onOpen = { id -> NAV_PAGES.firstOrNull { it.id == id }?.let { group = it.group; page = it.id } }, onNewGoal = { openForm("goal") }, onEditTx = { openForm("transaction", it) }, onWidgets = { ids -> updateWorkspace { root -> val st = root.objectOrEmpty("settings"); st.add("homeWidgets", com.google.gson.JsonArray().also { a -> ids.forEach { a.add(it) } }); root.add("settings", st) } })
-                        "navstudio" -> com.fincip.nativeapp.ui.NavStudioScreen(navPrefs, { p ->
-                            updateWorkspace { root -> val st = root.objectOrEmpty("settings"); st.add("navPrefs", p.toJson()); root.add("settings", st) }
-                            android.widget.Toast.makeText(context, "Navigation saved", android.widget.Toast.LENGTH_SHORT).show()
-                        }, {
-                            updateWorkspace { root -> val st = root.objectOrEmpty("settings"); st.remove("navPrefs"); root.add("settings", st) }
-                            android.widget.Toast.makeText(context, "Navigation reset to default", android.widget.Toast.LENGTH_SHORT).show()
-                        })
                         "dataio" -> com.fincip.nativeapp.ui.DataIOScreen(workspace, ::importBatch, ::undoBatch, { m -> month = m; page = "transactions" }, { pendingExport = workspace.toString(); exportJsonLauncher.launch("FinCip-backup.json") }, ::importLegacyText, ::notify)
                         "transactions" -> TransactionsScreen(workspace, month, privacy, transactionQuery, { transactionQuery = it }, { openForm("transaction") }, { openForm("transaction", it) }, { deleteFromArray("transactions", it.string("id")) }, { page = "dataio" }, { page = "dataio" })
                         "recurring" -> RecurringScreen(workspace, privacy, { openForm("bill") }, { deleteFromArray("recurringRules", it.string("id")) }, { markRecurringPaid(it) })
@@ -976,6 +973,15 @@ private fun FinCipApp(store: FinanceStore, securePrefs: SecurePrefs) {
                             vibe = vibe, onVibe = { vibe = it; context.getSharedPreferences("fincip_ui", 0).edit().putString("vibe", it).apply() },
                             dark = dark, onDark = { dark = it; context.getSharedPreferences("fincip_ui", 0).edit().putBoolean("dark", it).apply() },
                             soundOn = soundOn,
+                            navContent = {
+                                com.fincip.nativeapp.ui.NavStudioContent(navPrefs, { p ->
+                                    updateWorkspace { root -> val st = root.objectOrEmpty("settings"); st.add("navPrefs", p.toJson()); root.add("settings", st) }
+                                    android.widget.Toast.makeText(context, "Navigation saved", android.widget.Toast.LENGTH_SHORT).show()
+                                }, {
+                                    updateWorkspace { root -> val st = root.objectOrEmpty("settings"); st.remove("navPrefs"); root.add("settings", st) }
+                                    android.widget.Toast.makeText(context, "Navigation reset to default", android.widget.Toast.LENGTH_SHORT).show()
+                                })
+                            },
                             settingsContent = { section ->
                                 SettingsScreen(
                             workspace, vibe, { vibe = it; context.getSharedPreferences("fincip_ui", 0).edit().putString("vibe", it).apply() },
@@ -1005,7 +1011,7 @@ private fun FinCipApp(store: FinanceStore, securePrefs: SecurePrefs) {
                 if (!wide && sidebarExpanded) Box(Modifier.fillMaxSize().clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { sidebarExpanded = false })
                 }
               }
-              FinCipSidebar(
+              if (navPrefs.isDefaultDrawer) FinCipSidebar(
                   pages = NAV_PAGES, selectedPage = page, profile = profileOf(workspace), dark = dark,
                   onToggle = { toggleSidebar() },
                   onProfile = { page = "profile"; if (!wide || !navPrefs.isDefaultDrawer) sidebarExpanded = false },
@@ -1016,6 +1022,7 @@ private fun FinCipApp(store: FinanceStore, securePrefs: SecurePrefs) {
                   onTheme = { dark = !dark; context.getSharedPreferences("fincip_ui", 0).edit().putBoolean("dark", dark).apply() },
                   modifier = Modifier.align(Alignment.TopStart).offset(x = sidebarX)
               )
+              com.fincip.nativeapp.ui.NavOverlay(navPrefs, page, ::navGo, navState, Modifier.fillMaxSize())
             }
         }
     }
