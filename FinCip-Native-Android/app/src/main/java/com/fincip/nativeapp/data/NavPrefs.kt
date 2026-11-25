@@ -81,7 +81,7 @@ data class NavPrefs(
 object NavDests {
     val groups = listOf("Home", "Money", "Plan", "Explore", "You")
     val all: List<NavPage> = NAV_PAGES + listOf(NavPage("profile", "Profile", "You", "☺"), NavPage("customize", "Customize", "You", "✎"))
-    val quick = listOf("overview", "transactions", "budgets", "portfolio")
+    val quick = listOf("overview", "transactions", "budgets", "world")
 
     fun title(id: String) = all.firstOrNull { it.id == id.substringBefore(":") }?.title ?: "FinCip"
     fun groupOf(page: String): String = all.firstOrNull { it.id == page.substringBefore(":") }?.group

@@ -888,6 +888,7 @@ private fun FinCipApp(store: FinanceStore, securePrefs: SecurePrefs) {
                         "portfolio" -> PortfolioScreen(workspace, privacy, { openForm("investment") }, { deleteFromArray("investments", it.string("id")) })
                         "forecast" -> ForecastScreen(workspace, privacy)
                         "insights" -> InsightsScreen(workspace, month, privacy)
+                        "world" -> com.fincip.nativeapp.world.WorldScreen(workspace) { block -> updateWorkspace { root -> val w = root.objectOrEmpty("world"); w.block(); root.add("world", w) } }
                         "rules" -> RulesScreen(workspace, { openForm("rule") }, {
                             updateWorkspace { root ->
                                 val rules = root.arrayOrEmpty("smartRules").objects()

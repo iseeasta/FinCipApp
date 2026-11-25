@@ -29,6 +29,7 @@ data class NavPage(val id: String, val title: String, val group: String, val gly
 
 val NAV_PAGES = listOf(
     NavPage("overview", "Overview", "Home", "▦"),
+    NavPage("world", "World", "Home", "♀"),
     NavPage("transactions", "Transactions", "Money", "↔"),
     NavPage("dataio", "Import & export", "Money", "⇅"),
     NavPage("recurring", "Bills & repeats", "Money", "◷"),
