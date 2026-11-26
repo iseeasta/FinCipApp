@@ -13,7 +13,8 @@ object TxText {
     private fun titleCase(s: String): String = s.trim().lowercase(Locale.ROOT).split(Regex("\\s+")).filter { it.isNotEmpty() }
         .joinToString(" ") { w -> w.replaceFirstChar { c -> c.titlecase(Locale.ROOT) } }
 
-    private fun looksLikeId(p: String): Boolean = p.count { it.isDigit() } >= 5 || p.contains('@') || p.contains('*') || p.length > 28
+    private val ifsc = Regex("^[A-Za-z]{4}0[A-Za-z0-9]{6}$")
+    private fun looksLikeId(p: String): Boolean = p.count { it.isDigit() } >= 5 || p.contains('@') || p.contains('*') || p.length > 28 || ifsc.matches(p) || p.uppercase(Locale.ROOT).startsWith("PAYMENT")
 
     fun clean(raw: String): Clean {
         val text = raw.trim()
