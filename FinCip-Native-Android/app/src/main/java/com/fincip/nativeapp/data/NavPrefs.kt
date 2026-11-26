@@ -16,8 +16,8 @@ object NavLayouts {
         NavLayout("topChips", "Chip strip", "Top", "One scrolling strip with every page in it.", "top", listOf("flat" to "Flat", "floating" to "Floating", "pill" to "Pill", "compact" to "Compact")),
         NavLayout("bottomGroups", "Section tabs + pages", "Bottom", "Five section tabs, with the section's pages in a row above.", "bottom", listOf("flat" to "Classic", "floating" to "Floating", "pill" to "Pill", "curved" to "Curved", "compact" to "Compact")),
         NavLayout("bottomMore", "Quick tabs + More", "Bottom", "Your four main pages, plus More for a full-page picker.", "bottom", listOf("flat" to "Classic", "floating" to "Floating", "pill" to "Pill", "curved" to "Curved", "compact" to "Compact")),
-        NavLayout("dock", "Scrolling dock", "Floating", "A floating dock holding every page. Swipe along it.", "bottom", listOf("rounded" to "Rounded", "glass" to "Glass", "minimal" to "Minimal icons", "labels" to "With labels")),
-        NavLayout("pillMenu", "Expanding pill", "Floating", "A small pill of sections. Tap one and its pages pop up.", "bottom", listOf("pill" to "Solid", "glass" to "Glass")),
+        NavLayout("dock", "Floating dock", "Floating", "Four main tabs floating over your content. Tap one and its pages pop up as circles.", "overlay", listOf("rounded" to "Rounded", "glass" to "Glass", "minimal" to "Minimal icons", "labels" to "With labels")),
+        NavLayout("pillMenu", "Expanding pill", "Floating", "A small floating pill of sections. Tap one and its pages pop up as circles.", "overlay", listOf("pill" to "Solid", "glass" to "Glass")),
         NavLayout("fab", "Fan menu button", "Floating", "One floating button that fans out into sections.", "overlay", listOf("round" to "Solid", "glass" to "Glass")),
         NavLayout("overlay", "Full-screen menu", "Overlay", "A menu button in the header opens a full-screen page picker.", "overlay", listOf("grid" to "Tiles", "list" to "List")),
         NavLayout("search", "Search menu", "Overlay", "Type to jump to any page, like a command palette.", "overlay", listOf("flat" to "Solid", "glass" to "Glass"))
@@ -81,6 +81,10 @@ data class NavPrefs(
 object NavDests {
     val groups = listOf("Home", "Money", "Plan", "Explore", "You")
     val all: List<NavPage> = NAV_PAGES + listOf(NavPage("profile", "Profile", "You", "☺"), NavPage("customize", "Customize", "You", "✎"))
+    /** The floating dock shows four tabs; Explore and You share "More" so every page is still reachable. */
+    val dockTabs = listOf("Home", "Money", "Plan", "More")
+    fun tabPages(tab: String): List<NavPage> = if (tab == "More") pagesIn("Explore") + pagesIn("You") else pagesIn(tab)
+    fun dockTabOf(page: String): String = groupOf(page).let { if (it == "Explore" || it == "You") "More" else it }
     val quick = listOf("overview", "transactions", "budgets", "world")
 
     fun title(id: String) = all.firstOrNull { it.id == id.substringBefore(":") }?.title ?: "FinCip"

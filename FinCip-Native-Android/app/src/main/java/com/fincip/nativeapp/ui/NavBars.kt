@@ -46,6 +46,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.ui.draw.shadow
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -88,6 +89,9 @@ class NavState {
     val anyOpen: Boolean get() = sheetOpen || menuOpen || fanOpen || searchOpen || popupGroup != null || flyoutGroup != null
     fun closeAll() { sheetOpen = false; menuOpen = false; fanOpen = false; searchOpen = false; popupGroup = null; flyoutGroup = null }
 }
+
+/** Extra room pages leave at the bottom when a floating bar sits over them. */
+val LocalNavInset = androidx.compose.runtime.compositionLocalOf { 0.dp }
 
 @Composable fun rememberNavState() = remember { NavState() }
 
@@ -264,8 +268,7 @@ fun NavBottom(prefs: NavPrefs, page: String, onGo: (String) -> Unit, nav: NavSta
                     }
                 }
             }
-            "dock" -> DockBar(prefs, page, onGo, nav)
-            else -> PillBar(prefs, page, onGo, nav)
+            else -> Unit
         }
     }
 }
@@ -276,19 +279,47 @@ private fun shortTitle(d: NavPage) = when (d.id) { "overview" -> "Home"; "transa
 private fun DockBar(prefs: NavPrefs, page: String, onGo: (String) -> Unit, nav: NavState) {
     val glass = prefs.look == "glass"; val minimal = prefs.look == "minimal"
     val color = barColor(prefs, glass).let { if (minimal) it.copy(alpha = minOf(prefs.bgAlpha, .88f)) else it }
-    val items = NavDests.all
-    val idx = items.indexOfFirst { it.id == NavDests.baseId(page) }
-    val scroll = rememberScrollState()
-    val density = LocalDensity.current
-    val cellW = if (minimal) 52.dp else 62.dp
-    LaunchedEffect(idx) { scroll.animateScrollTo(((idx * with(density) { (cellW + prefs.spacing.dp).toPx() }) - 140f).toInt().coerceAtLeast(0)) }
-    Box(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 8.dp), contentAlignment = Alignment.Center) {
-        Shell(RoundedCornerShape(prefs.corner.dp), color, Modifier.wrapContentWidth(), glass, 14.dp) {
-            SlidingRow(items.size, idx, cellW, if (minimal) 48.dp else prefs.height.dp, prefs, Modifier.widthIn(max = 380.dp).horizontalScroll(scroll).padding(horizontal = 6.dp, vertical = 4.dp)) { i ->
-                val d = items[i]
-                NavCell(pageIcon(d.id), shortTitle(d), i == idx, prefs, false, false, { nav.closeAll(); onGo(d.id) }, forceLabel = prefs.look == "labels" && prefs.labels != "icons")
+    val tabs = NavDests.dockTabs
+    val idx = tabs.indexOf(NavDests.dockTabOf(page))
+    Box(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 10.dp), contentAlignment = Alignment.Center) {
+        Shell(RoundedCornerShape(prefs.corner.coerceAtLeast(20).dp), color, Modifier.fillMaxWidth(), glass, 14.dp) {
+            BoxWithConstraints(Modifier.padding(horizontal = 8.dp, vertical = 4.dp)) {
+                val n = tabs.size
+                val w = ((maxWidth - prefs.spacing.dp * (n - 1)) / n).coerceAtLeast(52.dp)
+                SlidingRow(n, idx, w, if (minimal) 52.dp else prefs.height.dp, prefs) { i ->
+                    val t = tabs[i]
+                    NavCell(if (t == "More") Icons.Default.MoreHoriz else groupIcon(t), t, i == idx || nav.popupGroup == t, prefs, false, false, { val open = nav.popupGroup == t; nav.closeAll(); if (!open) nav.popupGroup = t })
+                }
             }
         }
+    }
+}
+
+/** Pages of a section as round buttons that pop in one after another, with room to breathe. */
+@Composable
+private fun CirclePopup(pages: List<NavPage>, title: String, page: String, onGo: (String) -> Unit, modifier: Modifier = Modifier, end: Boolean = false) {
+    val cols = when { pages.size <= 4 -> pages.size.coerceAtLeast(1); pages.size <= 6 -> 3; else -> 4 }
+    Column(modifier, horizontalAlignment = if (end) Alignment.End else Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(22.dp)) {
+        Text(title.uppercase(), fontSize = 11.sp, fontWeight = FontWeight.Black, letterSpacing = 1.6.sp, color = Color.White.copy(alpha = .9f))
+        pages.chunked(cols).forEachIndexed { r, row ->
+            Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
+                row.forEachIndexed { c, d -> CircleItem(d, NavDests.baseId(page) == d.id, r * cols + c) { onGo(d.id) } }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CircleItem(d: NavPage, active: Boolean, index: Int, onClick: () -> Unit) {
+    val scheme = MaterialTheme.colorScheme
+    var shown by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { kotlinx.coroutines.delay(index * 35L); shown = true }
+    val s by animateFloatAsState(if (shown) 1f else 0f, spring(dampingRatio = .55f, stiffness = 380f), label = "pop")
+    Column(Modifier.width(66.dp).graphicsLayer { scaleX = s; scaleY = s; alpha = s.coerceIn(0f, 1f) }, horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Box(Modifier.size(56.dp).shadow(10.dp, CircleShape).clip(CircleShape).background(if (active) scheme.primaryContainer else scheme.surface).clickable(onClick = onClick), contentAlignment = Alignment.Center) {
+            Icon(pageIcon(d.id), d.title, tint = scheme.primary, modifier = Modifier.size(26.dp))
+        }
+        Text(shortTitle(d), fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
 
@@ -420,13 +451,17 @@ fun NavOverlay(prefs: NavPrefs, page: String, onGo: (String) -> Unit, nav: NavSt
     val scheme = MaterialTheme.colorScheme
     TrackLast(nav, page)
     val l = prefs.layout
-    val scrim = (nav.sheetOpen && l == "bottomMore") || (nav.popupGroup != null && (l == "pillMenu" || l == "fab")) || (nav.flyoutGroup != null && l == "rail") || (nav.fanOpen && l == "fab")
+    val scrim = (nav.sheetOpen && l == "bottomMore") || (nav.popupGroup != null && (l == "pillMenu" || l == "fab" || l == "dock")) || (nav.flyoutGroup != null && l == "rail") || (nav.fanOpen && l == "fab")
     fun Modifier.nb() = if (insets) navigationBarsPadding() else this
     val go: (String) -> Unit = { nav.closeAll(); onGo(it) }
     Box(modifier.fillMaxSize()) {
         AnimatedVisibility(scrim, enter = fadeIn(tween(220)), exit = fadeOut(tween(180))) {
             Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = .36f)).clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { nav.closeAll() })
         }
+
+        // Floating bars sit above the page, so content scrolls behind them
+        if (l == "dock") Box(Modifier.align(Alignment.BottomCenter).nb()) { DockBar(prefs, page, onGo, nav) }
+        if (l == "pillMenu") Box(Modifier.align(Alignment.BottomCenter).nb()) { PillBar(prefs, page, onGo, nav) }
 
         // More sheet
         AnimatedVisibility(nav.sheetOpen && l == "bottomMore", Modifier.align(Alignment.BottomCenter), enter = slideInVertically(spring(dampingRatio = .85f, stiffness = Spring.StiffnessMediumLow)) { it } + fadeIn(), exit = slideOutVertically(tween(220)) { it } + fadeOut()) {
@@ -451,8 +486,9 @@ fun NavOverlay(prefs: NavPrefs, page: String, onGo: (String) -> Unit, nav: NavSt
         }
 
         // Pop-up of a section's pages (pill menu and fan menu)
-        AnimatedVisibility(nav.popupGroup != null && (l == "pillMenu" || l == "fab"), Modifier.align(Alignment.BottomCenter).nb().padding(bottom = if (l == "fab") 96.dp else prefs.height.dp.coerceAtMost(64.dp) + 36.dp), enter = scaleIn(spring(dampingRatio = .7f, stiffness = 380f), initialScale = .7f) + fadeIn(), exit = scaleOut(tween(150), targetScale = .85f) + fadeOut(tween(150))) {
-            PagesPopup(nav.popupGroup ?: "Home", page, go)
+        AnimatedVisibility(nav.popupGroup != null && (l == "pillMenu" || l == "fab" || l == "dock"), Modifier.align(if (l == "fab") Alignment.BottomEnd else Alignment.BottomCenter).nb().padding(bottom = if (l == "fab") 100.dp else if (l == "pillMenu") prefs.height.dp.coerceAtMost(64.dp) + 44.dp else prefs.height.dp + 56.dp, end = if (l == "fab") 22.dp else 0.dp), enter = scaleIn(spring(dampingRatio = .7f, stiffness = 380f), initialScale = .7f, transformOrigin = androidx.compose.ui.graphics.TransformOrigin(if (l == "fab") 1f else .5f, 1f)) + fadeIn(), exit = scaleOut(tween(150), targetScale = .85f) + fadeOut(tween(150))) {
+            val g = nav.popupGroup ?: "Home"
+            CirclePopup(NavDests.tabPages(g), g, page, go, end = l == "fab")
         }
 
         // Fan menu
@@ -463,10 +499,10 @@ fun NavOverlay(prefs: NavPrefs, page: String, onGo: (String) -> Unit, nav: NavSt
             val activeG = NavDests.groupOf(page)
             Box(Modifier.align(Alignment.BottomEnd).nb().padding(end = 20.dp, bottom = 20.dp)) {
                 groups.forEachIndexed { i, g ->
-                    val a = Math.toRadians(180.0 + 90.0 * i / (groups.size - 1))
-                    val r = 118f * prog
+                    val a = Math.toRadians(184.0 + 82.0 * i / (groups.size - 1))
+                    val r = 190f * prog
                     Column(
-                        Modifier.offset(x = (cos(a) * r).dp, y = (sin(a) * r).dp).size(60.dp).graphicsLayer { alpha = prog; scaleX = .5f + .5f * prog; scaleY = .5f + .5f * prog }.clip(CircleShape).background(if (g == activeG) scheme.primaryContainer else scheme.surface).border(1.dp, scheme.outlineVariant, CircleShape)
+                        Modifier.offset(x = (cos(a) * r).dp, y = (sin(a) * r).dp).size(56.dp).graphicsLayer { alpha = prog; scaleX = .5f + .5f * prog; scaleY = .5f + .5f * prog }.clip(CircleShape).background(if (g == activeG) scheme.primaryContainer else scheme.surface).border(1.dp, scheme.outlineVariant, CircleShape)
                             .clickable(enabled = nav.fanOpen) {
                                 val ps = NavDests.pagesIn(g)
                                 if (ps.size == 1) go(ps.first().id) else { nav.fanOpen = false; nav.popupGroup = g }

@@ -119,7 +119,7 @@ val LocalEmbedded = androidx.compose.runtime.compositionLocalOf { false }
 @Composable
 private fun PageColumn(content: @Composable ColumnScope.() -> Unit) {
     if (LocalEmbedded.current) Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(14.dp), content = content)
-    else Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(14.dp), content = content)
+    else Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 24.dp + com.fincip.nativeapp.ui.LocalNavInset.current), verticalArrangement = Arrangement.spacedBy(14.dp), content = content)
 }
 
 /** Soft header card: pale green block with leaf blobs, big title, short description and the FinCip mark. */

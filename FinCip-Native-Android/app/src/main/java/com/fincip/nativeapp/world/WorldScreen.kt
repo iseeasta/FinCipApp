@@ -273,7 +273,7 @@ fun WorldScreen(workspace: JsonObject, onSave: (JsonObject.() -> Unit) -> Unit) 
                 Text("Right now: $uiAct", fontWeight = FontWeight.Bold, fontSize = 13.sp, modifier = Modifier.padding(top = 4.dp))
             }
         }
-        Text("Tap her or the furniture. Drag to pan, pinch or double-tap to zoom.", fontSize = 11.sp, color = MaterialTheme.colorScheme.onBackground.copy(alpha = .5f), modifier = Modifier.padding(top = 12.dp, bottom = 24.dp))
+        Text("Tap her or the furniture. Drag to pan, pinch or double-tap to zoom.", fontSize = 11.sp, color = MaterialTheme.colorScheme.onBackground.copy(alpha = .5f), modifier = Modifier.padding(top = 12.dp, bottom = 24.dp + com.fincip.nativeapp.ui.LocalNavInset.current))
     }
 }
 

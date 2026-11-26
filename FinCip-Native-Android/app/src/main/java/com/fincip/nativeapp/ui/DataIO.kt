@@ -58,7 +58,7 @@ fun DataIOScreen(
     onSetOpening: (Double) -> Unit = {}
 ) {
     var tab by rememberSaveable { mutableIntStateOf(0) }
-    Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 28.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+    Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 28.dp + LocalNavInset.current), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         NeoTitle("Your data, portable", if (tab == 0) "Import transactions" else "Export your financial data", if (tab == 0) "Bring in a CSV from a bank, UPI app, spreadsheet or another tracker. Every row lands on its real date." else "Choose how you want to export your transactions.")
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             PopChip("Import", tab == 0, { tab = 0 }); PopChip("Export", tab == 1, { tab = 1 })
@@ -74,16 +74,25 @@ fun DataIOScreen(
 @Composable
 private fun OpeningCard(workspace: JsonObject, detected: Double?, onSet: (Double) -> Unit) {
     val cur = com.fincip.nativeapp.data.openingBalance(workspace)
-    var field by remember(cur, detected) { mutableStateOf(if (detected != null) "%.2f".format(detected) else if (cur != 0.0) "%.2f".format(cur) else "") }
+    val moved = com.fincip.nativeapp.data.incomeTotal(workspace) - com.fincip.nativeapp.data.expenseTotal(workspace)
+    var mode by remember { mutableStateOf(0) }
+    var field by remember(cur, mode) { mutableStateOf("") }
+    LaunchedEffect(detected) { if (detected != null && cur == 0.0) onSet(detected) }
     NeoCard {
-        Text("Starting balance", fontWeight = FontWeight.Black)
-        Text("Your total balance is starting balance + income − spending. Statements only show what moved, so tell the app what you already had before your first entry.", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .75f), modifier = Modifier.padding(top = 4.dp))
-        if (detected != null) Text("This statement opens at ₹${"%,.2f".format(detected)} (worked out from its running balance). Use the earliest statement you have.", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Pop.Forest, modifier = Modifier.padding(top = 6.dp))
-        Row(Modifier.padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedTextField(field, { field = it.filter { c -> c.isDigit() || c == '.' || c == '-' } }, Modifier.weight(1f), singleLine = true, label = { Text("Amount (base currency)") }, keyboardOptions = KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Decimal))
-            NeoButton("Save", onClick = { onSet(field.toDoubleOrNull() ?: 0.0) })
+        Text("Match your real balance", fontWeight = FontWeight.Black, fontSize = 17.sp)
+        Text("A bank statement only lists what moved, not what you already had. This one number makes the total match your bank.", fontSize = 12.sp, lineHeight = 18.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .7f), modifier = Modifier.padding(top = 4.dp))
+        Row(Modifier.padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            PopChip("Balance in bank today", mode == 0, { mode = 0 }); PopChip("Balance at start", mode == 1, { mode = 1 })
         }
-        if (cur != 0.0) Text("Currently set: ₹${"%,.2f".format(cur)}", fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp))
+        OutlinedTextField(field, { field = it.filter { c -> c.isDigit() || c == '.' || c == '-' } }, Modifier.fillMaxWidth().padding(top = 10.dp), singleLine = true, shape = RoundedCornerShape(16.dp),
+            label = { Text(if (mode == 0) "What your bank shows now" else "Money you had before the first entry") }, prefix = { Text("₹ ") },
+            keyboardOptions = KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Decimal))
+        if (detected != null) Text("Your statement starts at ₹${"%,.2f".format(detected)}.", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Pop.Forest, modifier = Modifier.padding(top = 8.dp))
+        Row(Modifier.padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (detected != null && kotlin.math.abs(detected - cur) > 0.005) NeoOutlineButton("Use statement start", { onSet(detected) }, Modifier.weight(1f))
+            NeoButton("Save", Modifier.weight(1f), onClick = { val v = field.toDoubleOrNull(); if (v != null) onSet(if (mode == 0) Math.round((v - moved) * 100.0) / 100.0 else v) }, enabled = field.toDoubleOrNull() != null)
+        }
+        Text("Total now: ₹${"%,.2f".format(cur + moved)}  ·  starting balance ₹${"%,.2f".format(cur)}", fontSize = 12.sp, modifier = Modifier.padding(top = 8.dp), color = MaterialTheme.colorScheme.onSurface.copy(alpha = .7f))
     }
 }
 
