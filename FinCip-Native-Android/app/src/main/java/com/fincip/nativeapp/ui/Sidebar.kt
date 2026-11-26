@@ -27,7 +27,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountBalance
 import androidx.compose.material.icons.filled.Face
-import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Autorenew
 import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.Bolt
@@ -122,7 +121,6 @@ fun pageIcon(id: String): ImageVector = when (id) {
     "forecast" -> Icons.Default.Timeline
     "insights" -> Icons.Default.Insights
     "world" -> Icons.Default.Face
-    "mascot" -> Icons.Default.AutoAwesome
     "rules" -> Icons.Default.Bolt
     "receipts" -> Icons.Default.ReceiptLong
     "household" -> Icons.Default.Groups

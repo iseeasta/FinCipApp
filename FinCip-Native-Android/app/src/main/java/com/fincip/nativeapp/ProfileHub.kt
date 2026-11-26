@@ -166,7 +166,7 @@ private fun HubHeader(workspace: JsonObject) {
 private fun SectionTitle(text: String) = Text(text, fontWeight = FontWeight.Black, style = MaterialTheme.typography.titleLarge)
 
 @Composable
-private fun ProfileEditor(profile: JsonObject, onChange: (JsonObject.() -> Unit) -> Unit, onOpenMascot: () -> Unit = {}) {
+private fun ProfileEditor(profile: JsonObject, onChange: (JsonObject.() -> Unit) -> Unit) {
     val tap = rememberTap()
     var name by remember { mutableStateOf(profile.string("name")) }
     var handle by remember { mutableStateOf(profile.string("handle")) }
@@ -192,7 +192,6 @@ private fun ProfileEditor(profile: JsonObject, onChange: (JsonObject.() -> Unit)
             com.fincip.nativeapp.ui.UserAvatar(profileOf(JsonObject().apply { add("profile", profile) }), size = 84.dp)
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 NeoOutlineButton("Upload photo", { photoPicker.launch("image/*") })
-                NeoOutlineButton("Anime mascot", { onOpenMascot() })
                 NeoOutlineButton("Shuffle face", { seed = java.util.Random().nextLong() and 0x7fffffffL; saved = false; onChange { addProperty("avatarSeed", seed); addProperty("avatarMode", "seed") } })
             }
         }
@@ -664,7 +663,7 @@ private fun ProfilePage(workspace: JsonObject, onProfileChange: (JsonObject.() -
         androidx.compose.ui.window.Dialog(onDismissRequest = { editing = false }, properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)) {
             Column(Modifier.fillMaxSize().background(scheme.background).statusBarsPadding().navigationBarsPadding().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
                 Text("Edit profile", fontWeight = FontWeight.Black, fontSize = 24.sp)
-                ProfileEditor(raw, onProfileChange, onOpenMascot = { editing = false; onNavigate("mascot") })
+                ProfileEditor(raw, onProfileChange)
                 NeoButton("Done", Modifier.fillMaxWidth(), onClick = { editing = false })
             }
         }

@@ -281,8 +281,6 @@ fun OverviewScreen(workspace: JsonObject, month: String, privacy: Boolean, savin
             val xp = allTransactions.size * 10 + workspace.arrayOrEmpty("budgets").size() * 25 + workspace.arrayOrEmpty("goals").size() * 25 + workspace.arrayOrEmpty("financeProducts").size() * 25 + (if (achievedGoal) 200 else 0)
             val level = xp / 100 + 1
             val condition = when { ramen -> "ramen"; achievedGoal -> "goal"; expenses > income && income > 0 -> "stress"; savingMood -> "saving"; streak >= 7 -> "streak"; allTransactions.isEmpty() -> "empty"; else -> "neutral" }
-            com.fincip.nativeapp.ui.MascotGreetingCard(workspace.objectOrEmpty("profile").string("name"), mood, achievedGoal) { onOpen("mascot") }
-            androidx.compose.foundation.layout.Spacer(Modifier.height(12.dp))
             PetHomeCard(workspace, petMood, condition, streak, onMascot)
         }
     }, widgets = homeWidgetsOf(workspace), onWidgets = onWidgets)
@@ -306,7 +304,7 @@ fun TransactionsScreen(workspace: JsonObject, month: String, privacy: Boolean, q
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { NeoButton("+ Add transaction", Modifier.weight(1f), onAdd); NeoOutlineButton("Import statement", onImport, Modifier.weight(1f)) }
         PopField(value = query, onValueChange = onQuery, modifier = Modifier.fillMaxWidth(), label = { Text("Search transaction, person or project") })
         Row(verticalAlignment = Alignment.CenterVertically) { Text("${filtered.size} transactions · $month", Modifier.weight(1f), style = MaterialTheme.typography.labelMedium); InlineAction("Export CSV ↓", onExport) }
-        if (filtered.isEmpty()) com.fincip.nativeapp.ui.MascotEmptyCard("No transactions for this month", "Add an entry or import a bank statement.")
+        if (filtered.isEmpty()) NeoCard { Text("No transactions for this month", fontWeight = FontWeight.Black); Text("Add an entry or import a bank statement.", style = MaterialTheme.typography.bodySmall) }
         filtered.sortedByDescending { it.string("date") }.forEach { item -> TransactionCard(item, privacy, { onEdit(item) }, { onDelete(item) }) }
         Text("Converted summaries use ${base}. Original transaction amounts remain unchanged.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .6f))
     }
@@ -701,7 +699,7 @@ fun GoalsScreen(workspace: JsonObject, privacy: Boolean, onAdd: () -> Unit, onCo
             }
         }
         NeoButton("+ Add savings or debt goal", onClick = onAdd)
-        if (goals.isEmpty()) com.fincip.nativeapp.ui.MascotEmptyCard("Start with one meaningful goal", "Emergency fund, a trip, a course or a debt payoff.")
+        if (goals.isEmpty()) NeoCard { Text("Start with one meaningful goal", fontWeight = FontWeight.Black); Text("Emergency fund, a trip, a course or a debt payoff.", style = MaterialTheme.typography.bodySmall) }
         goals.forEach { goal ->
             val isDebt = goal.string("type") == "debt"
             val cur = goal.string("currency", "INR")

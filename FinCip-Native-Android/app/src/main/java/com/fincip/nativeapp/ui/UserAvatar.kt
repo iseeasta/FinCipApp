@@ -62,11 +62,6 @@ fun UserAvatar(profile: ProfileData, size: Dp = 64.dp, modifier: Modifier = Modi
         "preset" -> Box(modifier.size(size).clip(CircleShape)) {
             PetCharacter(AvatarPresets[profile.preset.coerceIn(0, AvatarPresets.lastIndex)], PetMood.HAPPY, 6, diameter = size)
         }
-        "mascot" -> {
-            val look = MascotRuntime.look
-            if (look != null) MascotView(look, size, modifier, animated = false, rounded = false, transparentBg = false, clipCircle = true)
-            else ProfileAvatar(profile.seed, modifier, size)
-        }
         else -> ProfileAvatar(profile.seed, modifier, size)
     }
 }
