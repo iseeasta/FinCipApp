@@ -163,12 +163,42 @@ val AccentPresets = listOf(
     AccentPreset("Black", Color(0xFF111111)), AccentPreset("Wallpaper", Color(0xFF7C9CF5))
 )
 
+/** A picked accent colour shows up for real: saturated brand colour, clearly tinted backgrounds. Dark mode is the same hue, just darker. */
+private fun strongScheme(hue: Float, sat: Float, dark: Boolean): ColorScheme {
+    fun hsl(h: Float, s: Float, l: Float) = Color.hsl(h.coerceIn(0f, 360f), s.coerceIn(0f, 1f), l.coerceIn(0f, 1f))
+    fun on(c: Color) = if (c.luminance() > 0.45f) Color(0xFF14110F) else Color.White
+    return if (dark) {
+        val primary = hsl(hue, sat, 0.58f); val container = hsl(hue, sat * 0.8f, 0.30f)
+        darkColorScheme(
+            primary = primary, onPrimary = on(primary), primaryContainer = container, onPrimaryContainer = hsl(hue, sat * 0.6f, 0.93f),
+            secondary = Pop.Coral, onSecondary = Color.White, tertiary = Pop.Teal, onTertiary = Color.White,
+            secondaryContainer = container, onSecondaryContainer = hsl(hue, 0.2f, 0.93f),
+            background = hsl(hue, sat * 0.45f, 0.10f), onBackground = hsl(hue, 0.15f, 0.94f),
+            surface = hsl(hue, sat * 0.40f, 0.155f), onSurface = hsl(hue, 0.15f, 0.94f),
+            surfaceVariant = hsl(hue, sat * 0.40f, 0.21f), onSurfaceVariant = hsl(hue, 0.15f, 0.82f),
+            outline = hsl(hue, sat * 0.3f, 0.45f), outlineVariant = hsl(hue, sat * 0.3f, 0.28f)
+        )
+    } else {
+        val primary = hsl(hue, sat, if (hue in 38f..70f) 0.45f else 0.42f); val container = hsl(hue, sat * 0.85f, 0.80f)
+        lightColorScheme(
+            primary = primary, onPrimary = on(primary), primaryContainer = container, onPrimaryContainer = hsl(hue, sat, 0.14f),
+            secondary = Pop.Coral, onSecondary = Color.White, tertiary = Pop.Teal, onTertiary = Color.White,
+            secondaryContainer = container, onSecondaryContainer = hsl(hue, sat * 0.6f, 0.12f),
+            background = hsl(hue, sat * 0.55f, 0.925f), onBackground = hsl(hue, 0.3f, 0.10f),
+            surface = hsl(hue, sat * 0.40f, 0.975f), onSurface = hsl(hue, 0.3f, 0.10f),
+            surfaceVariant = hsl(hue, sat * 0.45f, 0.87f), onSurfaceVariant = hsl(hue, 0.2f, 0.28f),
+            outline = hsl(hue, sat * 0.3f, 0.55f), outlineVariant = hsl(hue, sat * 0.4f, 0.80f)
+        )
+    }
+}
+
 /** Builds a full light or dark colour scheme from one seed colour, shaped by the vibe's background tint. */
-private fun buildScheme(seed: Color, dark: Boolean, spec: VibeSpec, amoled: Boolean): ColorScheme {
+private fun buildScheme(seed: Color, dark: Boolean, spec: VibeSpec, amoled: Boolean, strong: Boolean = false): ColorScheme {
     val hsv = FloatArray(3)
     android.graphics.Color.colorToHSV(seed.toArgb(), hsv)
     val neutral = hsv[1] < 0.12f
     val hue = hsv[0]
+    if (strong && !neutral) return strongScheme(hsv[0], hsv[1].coerceIn(0.55f, 1f), dark)
     val sat = if (neutral) 0f else (hsv[1] * 0.9f).coerceIn(0.35f, 0.95f)
     val tHue = if (neutral) (spec.tintHue ?: 0f) else (if (spec.tintHue != null && spec.name != "Midnight Neon") hue else hue)
     val tSat = if (neutral) (if (spec.tintHue != null) spec.tintSat * 0.5f else 0f) else spec.tintSat.coerceAtMost(0.5f)
@@ -212,7 +242,7 @@ fun FinCipTheme(vibe: String, dark: Boolean, accent: String = "Default", content
     val preset = AccentPresets.firstOrNull { it.name == accent && it.name != "Wallpaper" }
     val scheme = when {
         wallpaper -> if (useDark) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
-        preset != null -> buildScheme(preset.swatch, useDark, spec, amoled = preset.name == "Black")
+        preset != null -> buildScheme(preset.swatch, useDark, spec, amoled = preset.name == "Black", strong = true)
         spec.handcrafted != null -> spec.handcrafted.invoke(useDark)
         else -> buildScheme(spec.seed, useDark, spec, amoled = false)
     }

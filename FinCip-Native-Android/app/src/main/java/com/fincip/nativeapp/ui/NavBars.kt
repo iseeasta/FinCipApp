@@ -92,20 +92,28 @@ class NavState {
 
 /** Extra room pages leave at the bottom when a floating bar sits over them. */
 val LocalNavInset = androidx.compose.runtime.compositionLocalOf { 0.dp }
+/** Same idea for floating bars at the top. */
+val LocalNavTop = androidx.compose.runtime.compositionLocalOf { 0.dp }
 
 @Composable fun rememberNavState() = remember { NavState() }
 
 // ------------------------------------------------------------------ building blocks
 
 @Composable
-private fun barColor(p: NavPrefs, glass: Boolean) = MaterialTheme.colorScheme.surface.copy(alpha = if (glass) minOf(p.bgAlpha, .6f) else p.bgAlpha)
+private fun barColor(p: NavPrefs, glass: Boolean) = MaterialTheme.colorScheme.surface.copy(alpha = p.bgAlpha)
 
 private fun showIcon(p: NavPrefs) = p.labels != "text"
 private fun showLabel(p: NavPrefs) = p.labels != "icons"
 
+/** Glass: the page shows through at the chosen opacity, with a soft white sheen and a bright rim. */
 @Composable
 private fun Shell(shape: Shape, color: Color, modifier: Modifier = Modifier, border: Boolean = false, elevation: Dp = 8.dp, content: @Composable () -> Unit) {
-    Surface(modifier, shape = shape, color = color, shadowElevation = if (color.alpha < .7f) 0.dp else elevation, border = if (border) BorderStroke(1.dp, Color.White.copy(alpha = .35f)) else null, content = content)
+    val see = color.alpha < .85f
+    Box(
+        modifier.then(if (see) Modifier else Modifier.shadow(elevation, shape)).clip(shape).background(color)
+            .background(androidx.compose.ui.graphics.Brush.verticalGradient(listOf(Color.White.copy(alpha = if (see) .26f else .12f), Color.White.copy(alpha = .03f))))
+            .border(1.dp, Color.White.copy(alpha = if (see || border) .5f else 0f), shape)
+    ) { content() }
 }
 
 @Composable
@@ -180,7 +188,7 @@ private fun PageChips(pages: List<NavPage>, page: String, prefs: NavPrefs, onGo:
 
 @Composable
 private fun TrackLast(nav: NavState, page: String) {
-    LaunchedEffect(page) { nav.lastInGroup[NavDests.groupOf(page)] = NavDests.baseId(page) }
+    LaunchedEffect(page) { nav.lastInGroup[NavDests.groupOf(page)] = NavDests.baseId(page); nav.lastInGroup[NavDests.dockTabOf(page)] = NavDests.baseId(page) }
 }
 
 private fun goGroup(g: String, nav: NavState, onGo: (String) -> Unit) { onGo(nav.lastInGroup[g] ?: NavDests.pagesIn(g).first().id) }
@@ -191,42 +199,46 @@ private val spec = tween<Float>(260)
 
 @Composable
 fun NavTop(prefs: NavPrefs, page: String, onGo: (String) -> Unit, nav: NavState, modifier: Modifier = Modifier) {
-    if (prefs.region != "top") return
+    if (prefs.layout != "topTabs" && prefs.layout != "topChips") return
     TrackLast(nav, page)
     AnimatedContent(prefs.layout + prefs.look, modifier, transitionSpec = { (fadeIn(tween(260)) + slideInVertically(tween(300)) { -it / 3 }) togetherWith fadeOut(tween(140)) }, label = "topLayout") {
-        BarShell(prefs, bottom = false) {
-            if (prefs.layout == "topTabs") {
-                val group = NavDests.groupOf(page)
-                val idx = NavDests.groups.indexOf(group)
-                Column(Modifier.animateContentSize(spring(stiffness = Spring.StiffnessMediumLow))) {
-                    BoxWithConstraints(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp)) {
-                        val n = NavDests.groups.size
-                        val w = ((maxWidth - prefs.spacing.dp * (n - 1)) / n).coerceAtLeast(60.dp)
-                        SlidingRow(n, idx, w, if (prefs.look == "compact") 44.dp else prefs.height.dp.coerceAtMost(64.dp), prefs, Modifier.horizontalScroll(rememberScrollState())) { i ->
-                            val g = NavDests.groups[i]
-                            NavCell(groupIcon(g), g, i == idx, prefs, false, false, { goGroup(g, nav, onGo) })
-                        }
-                    }
-                    AnimatedContent(group, transitionSpec = { fadeIn(tween(220)) togetherWith fadeOut(tween(120)) }, label = "pages") { g ->
-                        val ps = NavDests.pagesIn(g)
-                        if (ps.size > 1) PageChips(ps, page, prefs, onGo) else Spacer(Modifier.height(2.dp))
-                    }
-                }
-            } else {
-                val scroll = rememberScrollState()
-                val density = LocalDensity.current
-                val idx = NavDests.all.indexOfFirst { it.id == NavDests.baseId(page) }.coerceAtLeast(0)
-                LaunchedEffect(idx) { scroll.animateScrollTo(((idx * with(density) { 112.dp.toPx() }) - 120f).toInt().coerceAtLeast(0)) }
-                Row(Modifier.horizontalScroll(scroll).padding(horizontal = 8.dp, vertical = if (prefs.look == "compact") 2.dp else 6.dp), horizontalArrangement = Arrangement.spacedBy(prefs.spacing.dp), verticalAlignment = Alignment.CenterVertically) {
-                    var last = ""
-                    NavDests.all.forEach { p ->
-                        if (last.isNotEmpty() && last != p.group) Box(Modifier.padding(horizontal = 4.dp).width(1.dp).height(22.dp).background(MaterialTheme.colorScheme.outlineVariant))
-                        last = p.group
-                        NavCell(pageIcon(p.id), p.title, NavDests.baseId(page) == p.id, prefs, true, true, { onGo(p.id) }, Modifier.heightIn(min = if (prefs.look == "compact") 36.dp else 44.dp))
-                    }
+        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(0.dp)) {
+            TabsBar(prefs, page, onGo, nav, popup = prefs.layout == "topChips")
+            if (prefs.layout == "topTabs") AnimatedContent(NavDests.dockTabOf(page), transitionSpec = { fadeIn(tween(220)) togetherWith fadeOut(tween(120)) }, label = "topPages") { t -> PagesPill(NavDests.tabPages(t), page, prefs, onGo) }
+        }
+    }
+}
+
+/** Four main tabs in a floating glass pill. Either they go to their page, or they open a circle pop-up. */
+@Composable
+private fun TabsBar(prefs: NavPrefs, page: String, onGo: (String) -> Unit, nav: NavState, popup: Boolean) {
+    val glass = prefs.look == "glass"; val minimal = prefs.look == "minimal"
+    val color = barColor(prefs, glass)
+    val tabs = NavDests.dockTabs
+    val idx = tabs.indexOf(NavDests.dockTabOf(page))
+    Box(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 8.dp), contentAlignment = Alignment.Center) {
+        Shell(RoundedCornerShape(if (prefs.look == "pill") 50.dp else prefs.corner.coerceAtLeast(20).dp), color, Modifier.fillMaxWidth(), glass, 14.dp) {
+            BoxWithConstraints(Modifier.padding(horizontal = 8.dp, vertical = 4.dp)) {
+                val n = tabs.size
+                val w = ((maxWidth - prefs.spacing.dp * (n - 1)) / n).coerceAtLeast(52.dp)
+                SlidingRow(n, idx, w, if (minimal || prefs.look == "compact") 48.dp else prefs.height.dp.coerceAtMost(72.dp), prefs) { i ->
+                    val t = tabs[i]
+                    NavCell(if (t == "More") Icons.Default.MoreHoriz else groupIcon(t), t, i == idx || nav.popupGroup == t, prefs, false, false, {
+                        if (popup) { val open = nav.popupGroup == t; nav.closeAll(); if (!open) nav.popupGroup = t }
+                        else { nav.closeAll(); onGo(nav.lastInGroup[t] ?: NavDests.tabPages(t).first().id) }
+                    })
                 }
             }
         }
+    }
+}
+
+/** The pages of the current tab as their own small floating pill, separate from the tab bar. */
+@Composable
+private fun PagesPill(pages: List<NavPage>, page: String, prefs: NavPrefs, onGo: (String) -> Unit) {
+    if (pages.size < 2) return
+    Box(Modifier.padding(horizontal = 24.dp, vertical = 4.dp), contentAlignment = Alignment.Center) {
+        Shell(RoundedCornerShape(50), barColor(prefs, prefs.look == "glass"), Modifier.widthIn(max = 380.dp), true, 10.dp) { PageChips(pages, page, prefs, onGo) }
     }
 }
 
@@ -234,26 +246,15 @@ fun NavTop(prefs: NavPrefs, page: String, onGo: (String) -> Unit, nav: NavState,
 
 @Composable
 fun NavBottom(prefs: NavPrefs, page: String, onGo: (String) -> Unit, nav: NavState, modifier: Modifier = Modifier) {
-    if (prefs.region != "bottom") return
+    if (prefs.layout != "bottomGroups" && prefs.layout != "bottomMore") return
     TrackLast(nav, page)
     val compact = prefs.look == "compact"
     val barH = if (compact) minOf(prefs.height.dp, 52.dp) else prefs.height.dp
     AnimatedContent(prefs.layout + prefs.look, modifier, transitionSpec = { (fadeIn(tween(260)) + slideInVertically(tween(300)) { it / 3 }) togetherWith fadeOut(tween(140)) }, label = "bottomLayout") {
         when (prefs.layout) {
-            "bottomGroups" -> BarShell(prefs, bottom = true) {
-                val group = NavDests.groupOf(page)
-                val idx = NavDests.groups.indexOf(group)
-                Column(Modifier.animateContentSize(spring(stiffness = Spring.StiffnessMediumLow))) {
-                    AnimatedContent(group, transitionSpec = { (fadeIn(tween(220)) + slideInVertically(tween(240)) { it / 4 }) togetherWith fadeOut(tween(120)) }, label = "pages") { g ->
-                        val ps = NavDests.pagesIn(g)
-                        if (ps.size > 1) PageChips(ps, page, prefs, onGo) else Spacer(Modifier.height(2.dp))
-                    }
-                    BoxWithConstraints(Modifier.fillMaxWidth().padding(horizontal = 6.dp)) {
-                        val n = NavDests.groups.size
-                        val w = ((maxWidth - prefs.spacing.dp * (n - 1)) / n).coerceAtLeast(56.dp)
-                        SlidingRow(n, idx, w, barH, prefs) { i -> val g = NavDests.groups[i]; NavCell(groupIcon(g), g, i == idx, prefs, false, false, { goGroup(g, nav, onGo) }, forceLabel = compact && prefs.labels == "text") }
-                    }
-                }
+            "bottomGroups" -> Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                AnimatedContent(NavDests.dockTabOf(page), transitionSpec = { (fadeIn(tween(220)) + slideInVertically(tween(240)) { it / 4 }) togetherWith fadeOut(tween(120)) }, label = "pages") { t -> PagesPill(NavDests.tabPages(t), page, prefs, onGo) }
+                TabsBar(prefs, page, onGo, nav, popup = false)
             }
             "bottomMore" -> BarShell(prefs, bottom = true) {
                 val base = NavDests.baseId(page)
@@ -274,26 +275,6 @@ fun NavBottom(prefs: NavPrefs, page: String, onGo: (String) -> Unit, nav: NavSta
 }
 
 private fun shortTitle(d: NavPage) = when (d.id) { "overview" -> "Home"; "transactions" -> "Money"; else -> d.title }
-
-@Composable
-private fun DockBar(prefs: NavPrefs, page: String, onGo: (String) -> Unit, nav: NavState) {
-    val glass = prefs.look == "glass"; val minimal = prefs.look == "minimal"
-    val color = barColor(prefs, glass).let { if (minimal) it.copy(alpha = minOf(prefs.bgAlpha, .88f)) else it }
-    val tabs = NavDests.dockTabs
-    val idx = tabs.indexOf(NavDests.dockTabOf(page))
-    Box(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 10.dp), contentAlignment = Alignment.Center) {
-        Shell(RoundedCornerShape(prefs.corner.coerceAtLeast(20).dp), color, Modifier.fillMaxWidth(), glass, 14.dp) {
-            BoxWithConstraints(Modifier.padding(horizontal = 8.dp, vertical = 4.dp)) {
-                val n = tabs.size
-                val w = ((maxWidth - prefs.spacing.dp * (n - 1)) / n).coerceAtLeast(52.dp)
-                SlidingRow(n, idx, w, if (minimal) 52.dp else prefs.height.dp, prefs) { i ->
-                    val t = tabs[i]
-                    NavCell(if (t == "More") Icons.Default.MoreHoriz else groupIcon(t), t, i == idx || nav.popupGroup == t, prefs, false, false, { val open = nav.popupGroup == t; nav.closeAll(); if (!open) nav.popupGroup = t })
-                }
-            }
-        }
-    }
-}
 
 /** Pages of a section as round buttons that pop in one after another, with room to breathe. */
 @Composable
@@ -344,47 +325,46 @@ private fun PillBar(prefs: NavPrefs, page: String, onGo: (String) -> Unit, nav: 
 
 // ------------------------------------------------------------------ SIDE
 
+fun railWidth(prefs: NavPrefs) = maxOf(64, minOf(prefs.height + 4, 92)).dp
+
 @Composable
 fun NavSide(prefs: NavPrefs, page: String, onGo: (String) -> Unit, nav: NavState, modifier: Modifier = Modifier) {
-    if (prefs.region != "side") return
+    if (prefs.layout != "rail" && prefs.layout != "collapsible") return
     TrackLast(nav, page)
     val glass = prefs.look == "glass"
     val color = barColor(prefs, glass)
     val group = NavDests.groupOf(page)
     val collapsible = prefs.layout == "collapsible"
     val expanded = collapsible && nav.sideExpanded
-    val width by animateDpAsState(if (expanded) 236.dp else maxOf(64.dp, minOf(prefs.height.dp + 4.dp, 92.dp)), spring(dampingRatio = .85f, stiffness = Spring.StiffnessMediumLow), label = "sideW")
-    val body: @Composable () -> Unit = {
-        Column(Modifier.width(width).fillMaxHeight().verticalScroll(rememberScrollState()).padding(vertical = 8.dp, horizontal = 6.dp), verticalArrangement = Arrangement.spacedBy(prefs.spacing.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-            if (collapsible) Icon(if (expanded) Icons.Default.ChevronLeft else Icons.Default.ChevronRight, contentDescription = if (expanded) "Collapse menu" else "Expand menu", modifier = Modifier.size(36.dp).clip(CircleShape).clickable { nav.closeAll(); nav.sideExpanded = !nav.sideExpanded }.padding(6.dp))
-            NavDests.groups.forEach { g ->
-                val ps = NavDests.pagesIn(g)
-                val open = g in nav.openGroups
-                if (expanded) {
-                    Column(Modifier.fillMaxWidth()) {
-                        Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).clickable { if (ps.size == 1) onGo(ps.first().id) else if (open) nav.openGroups.remove(g) else nav.openGroups.add(g) }.padding(horizontal = 10.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Icon(groupIcon(g), null, tint = if (g == group) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = .7f), modifier = Modifier.size(prefs.iconSize.dp))
-                            Text(g, Modifier.weight(1f).padding(start = 12.dp), fontWeight = FontWeight.Black, fontSize = 14.sp)
-                            if (ps.size > 1) Icon(Icons.Default.KeyboardArrowDown, null, modifier = Modifier.size(20.dp).graphicsLayer { rotationZ = if (open) 180f else 0f })
-                        }
-                        if (ps.size > 1) AnimatedVisibility(open, enter = expandVertically(tween(260)) + fadeIn(tween(260)), exit = shrinkVertically(tween(200)) + fadeOut(tween(150))) {
-                            Column(Modifier.padding(start = 14.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                                ps.forEach { p -> NavCell(pageIcon(p.id), p.title, NavDests.baseId(page) == p.id, prefs, true, true, { onGo(p.id) }, Modifier.fillMaxWidth(), forceLabel = true) }
+    val width by animateDpAsState(if (expanded) 236.dp else railWidth(prefs), spring(dampingRatio = .85f, stiffness = Spring.StiffnessMediumLow), label = "sideW")
+    Box(modifier.padding(start = 8.dp)) {
+        Shell(RoundedCornerShape(prefs.corner.coerceAtLeast(20).dp), color, Modifier, glass, 12.dp) {
+            Column(Modifier.width(width).heightIn(max = 540.dp).verticalScroll(rememberScrollState()).padding(vertical = 8.dp, horizontal = 6.dp), verticalArrangement = Arrangement.spacedBy(prefs.spacing.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                if (collapsible) Icon(if (expanded) Icons.Default.ChevronLeft else Icons.Default.ChevronRight, contentDescription = if (expanded) "Collapse menu" else "Expand menu", modifier = Modifier.size(36.dp).clip(CircleShape).clickable { nav.closeAll(); nav.sideExpanded = !nav.sideExpanded }.padding(6.dp))
+                NavDests.groups.forEach { g ->
+                    val ps = NavDests.pagesIn(g)
+                    val open = g in nav.openGroups
+                    if (expanded) {
+                        Column(Modifier.fillMaxWidth()) {
+                            Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).clickable { if (ps.size == 1) onGo(ps.first().id) else if (open) nav.openGroups.remove(g) else nav.openGroups.add(g) }.padding(horizontal = 10.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Icon(groupIcon(g), null, tint = if (g == group) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = .7f), modifier = Modifier.size(prefs.iconSize.dp))
+                                Text(g, Modifier.weight(1f).padding(start = 12.dp), fontWeight = FontWeight.Black, fontSize = 14.sp)
+                                if (ps.size > 1) Icon(Icons.Default.KeyboardArrowDown, null, modifier = Modifier.size(20.dp).graphicsLayer { rotationZ = if (open) 180f else 0f })
+                            }
+                            if (ps.size > 1) AnimatedVisibility(open, enter = expandVertically(tween(260)) + fadeIn(tween(260)), exit = shrinkVertically(tween(200)) + fadeOut(tween(150))) {
+                                Column(Modifier.padding(start = 14.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                    ps.forEach { p -> NavCell(pageIcon(p.id), p.title, NavDests.baseId(page) == p.id, prefs, true, true, { onGo(p.id) }, Modifier.fillMaxWidth(), forceLabel = true) }
+                                }
                             }
                         }
+                    } else {
+                        NavCell(groupIcon(g), g, g == group || nav.flyoutGroup == g, prefs, false, true, {
+                            if (ps.size == 1) { nav.closeAll(); onGo(ps.first().id) } else { val o = nav.flyoutGroup == g; nav.closeAll(); if (!o) nav.flyoutGroup = g }
+                        }, Modifier.fillMaxWidth().heightIn(min = 48.dp))
                     }
-                } else {
-                    NavCell(groupIcon(g), g, g == group || nav.flyoutGroup == g, prefs, false, true, {
-                        if (collapsible) { nav.sideExpanded = true; if (ps.size > 1 && g !in nav.openGroups) nav.openGroups.add(g); if (ps.size == 1) onGo(ps.first().id) }
-                        else if (ps.size == 1) { nav.closeAll(); onGo(ps.first().id) } else { val o = nav.flyoutGroup == g; nav.closeAll(); if (!o) nav.flyoutGroup = g }
-                    }, Modifier.fillMaxWidth().heightIn(min = 48.dp))
                 }
             }
         }
-    }
-    when (prefs.look) {
-        "floating", "glass" -> Box(modifier.padding(8.dp).fillMaxHeight()) { Shell(RoundedCornerShape(prefs.corner.dp), color, Modifier.fillMaxHeight(), glass, 12.dp, body) }
-        else -> Shell(RoundedCornerShape(0.dp), color, modifier.fillMaxHeight(), false, 4.dp, body)
     }
 }
 
@@ -447,11 +427,11 @@ private fun PagesPopup(group: String, page: String, onGo: (String) -> Unit, modi
 }
 
 @Composable
-fun NavOverlay(prefs: NavPrefs, page: String, onGo: (String) -> Unit, nav: NavState, modifier: Modifier = Modifier, insets: Boolean = true) {
+fun NavOverlay(prefs: NavPrefs, page: String, onGo: (String) -> Unit, nav: NavState, modifier: Modifier = Modifier, insets: Boolean = true, topOffset: Dp = 0.dp) {
     val scheme = MaterialTheme.colorScheme
     TrackLast(nav, page)
     val l = prefs.layout
-    val scrim = (nav.sheetOpen && l == "bottomMore") || (nav.popupGroup != null && (l == "pillMenu" || l == "fab" || l == "dock")) || (nav.flyoutGroup != null && l == "rail") || (nav.fanOpen && l == "fab")
+    val scrim = (nav.sheetOpen && l == "bottomMore") || (nav.popupGroup != null && (l == "pillMenu" || l == "fab" || l == "dock" || l == "topChips")) || (nav.flyoutGroup != null && (l == "rail" || l == "collapsible")) || (nav.fanOpen && l == "fab")
     fun Modifier.nb() = if (insets) navigationBarsPadding() else this
     val go: (String) -> Unit = { nav.closeAll(); onGo(it) }
     Box(modifier.fillMaxSize()) {
@@ -460,7 +440,10 @@ fun NavOverlay(prefs: NavPrefs, page: String, onGo: (String) -> Unit, nav: NavSt
         }
 
         // Floating bars sit above the page, so content scrolls behind them
-        if (l == "dock") Box(Modifier.align(Alignment.BottomCenter).nb()) { DockBar(prefs, page, onGo, nav) }
+        if (l == "dock") Box(Modifier.align(Alignment.BottomCenter).nb()) { TabsBar(prefs, page, onGo, nav, popup = true) }
+        NavBottom(prefs, page, onGo, nav, Modifier.align(Alignment.BottomCenter).nb())
+        NavTop(prefs, page, onGo, nav, Modifier.align(Alignment.TopCenter).padding(top = topOffset))
+        Box(Modifier.align(Alignment.CenterStart)) { NavSide(prefs, page, onGo, nav) }
         if (l == "pillMenu") Box(Modifier.align(Alignment.BottomCenter).nb()) { PillBar(prefs, page, onGo, nav) }
 
         // More sheet
@@ -474,13 +457,12 @@ fun NavOverlay(prefs: NavPrefs, page: String, onGo: (String) -> Unit, nav: NavSt
             }
         }
 
-        // Flyout beside the rail
-        AnimatedVisibility(nav.flyoutGroup != null && l == "rail", Modifier.align(Alignment.CenterStart).padding(start = maxOf(64.dp, minOf(prefs.height.dp + 4.dp, 92.dp)) + if (prefs.look == "flat") 4.dp else 12.dp), enter = slideInHorizontally(spring(dampingRatio = .8f, stiffness = Spring.StiffnessMediumLow)) { -it / 2 } + fadeIn(), exit = slideOutHorizontally(tween(180)) { -it / 2 } + fadeOut()) {
+        // Pages of a section slide out beside the rail as a row of pills
+        AnimatedVisibility(nav.flyoutGroup != null && (l == "rail" || l == "collapsible"), Modifier.align(Alignment.CenterStart).padding(start = railWidth(prefs) + 22.dp).offset(y = (60.dp + prefs.spacing.dp) * ((NavDests.groups.indexOf(nav.flyoutGroup ?: "Home")) - 2f) + (if (l == "collapsible") 20.dp else 0.dp)), enter = slideInHorizontally(spring(dampingRatio = .8f, stiffness = Spring.StiffnessMediumLow)) { -it / 3 } + fadeIn(), exit = slideOutHorizontally(tween(180)) { -it / 3 } + fadeOut()) {
             val g = nav.flyoutGroup ?: ""
-            Surface(shape = RoundedCornerShape(24.dp), color = scheme.surface, shadowElevation = 16.dp) {
-                Column(Modifier.width(220.dp).padding(10.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    Text(g.uppercase(), fontSize = 11.sp, fontWeight = FontWeight.Black, letterSpacing = 1.2.sp, color = scheme.onSurface.copy(alpha = .55f), modifier = Modifier.padding(start = 10.dp, bottom = 4.dp))
-                    NavDests.pagesIn(g).forEach { p -> NavCell(pageIcon(p.id), p.title, NavDests.baseId(page) == p.id, prefs, true, true, { go(p.id) }, Modifier.fillMaxWidth(), forceLabel = true) }
+            Shell(RoundedCornerShape(50), scheme.surface.copy(alpha = maxOf(prefs.bgAlpha, .82f)), Modifier.widthIn(max = 290.dp), true, 16.dp) {
+                Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 8.dp, vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+                    NavDests.pagesIn(g).forEach { p -> NavCell(pageIcon(p.id), p.title, NavDests.baseId(page) == p.id, prefs, true, true, { go(p.id) }, forceLabel = true) }
                 }
             }
         }
@@ -489,6 +471,11 @@ fun NavOverlay(prefs: NavPrefs, page: String, onGo: (String) -> Unit, nav: NavSt
         AnimatedVisibility(nav.popupGroup != null && (l == "pillMenu" || l == "fab" || l == "dock"), Modifier.align(if (l == "fab") Alignment.BottomEnd else Alignment.BottomCenter).nb().padding(bottom = if (l == "fab") 100.dp else if (l == "pillMenu") prefs.height.dp.coerceAtMost(64.dp) + 44.dp else prefs.height.dp + 56.dp, end = if (l == "fab") 22.dp else 0.dp), enter = scaleIn(spring(dampingRatio = .7f, stiffness = 380f), initialScale = .7f, transformOrigin = androidx.compose.ui.graphics.TransformOrigin(if (l == "fab") 1f else .5f, 1f)) + fadeIn(), exit = scaleOut(tween(150), targetScale = .85f) + fadeOut(tween(150))) {
             val g = nav.popupGroup ?: "Home"
             CirclePopup(NavDests.tabPages(g), g, page, go, end = l == "fab")
+        }
+
+        AnimatedVisibility(nav.popupGroup != null && l == "topChips", Modifier.align(Alignment.TopCenter).padding(top = topOffset + prefs.height.dp.coerceAtMost(72.dp) + 36.dp), enter = scaleIn(spring(dampingRatio = .7f, stiffness = 380f), initialScale = .7f, transformOrigin = androidx.compose.ui.graphics.TransformOrigin(.5f, 0f)) + fadeIn(), exit = scaleOut(tween(150), targetScale = .85f) + fadeOut(tween(150))) {
+            val g = nav.popupGroup ?: "Home"
+            CirclePopup(NavDests.tabPages(g), g, page, go)
         }
 
         // Fan menu
@@ -601,9 +588,6 @@ private fun NavPreview(prefs: NavPrefs) {
     }
     Box(Modifier.fillMaxWidth().height(400.dp).clip(RoundedCornerShape(26.dp)).border(2.dp, scheme.outline.copy(alpha = .4f), RoundedCornerShape(26.dp)).background(scheme.background)) {
         when (prefs.region) {
-            "top" -> Column(Modifier.fillMaxSize()) { NavTop(prefs, page, go, nav); content(Modifier.weight(1f).fillMaxWidth()) }
-            "bottom" -> Column(Modifier.fillMaxSize()) { content(Modifier.weight(1f).fillMaxWidth()); NavBottom(prefs, page, go, nav) }
-            "side" -> Row(Modifier.fillMaxSize()) { NavSide(prefs, page, go, nav); content(Modifier.weight(1f).fillMaxHeight()) }
             "drawer" -> Row(Modifier.fillMaxSize()) {
                 Column(Modifier.width(130.dp).fillMaxHeight().background(scheme.surface).padding(8.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     Text("FinCip", fontWeight = FontWeight.Black, fontSize = 16.sp, modifier = Modifier.padding(6.dp))
@@ -611,7 +595,7 @@ private fun NavPreview(prefs: NavPrefs) {
                 }
                 content(Modifier.weight(1f).fillMaxHeight())
             }
-            else -> content(Modifier.fillMaxSize())
+            else -> content(Modifier.fillMaxSize().padding(top = when (prefs.layout) { "topChips" -> 62.dp; "topTabs" -> 118.dp; else -> 0.dp }))
         }
         NavOverlay(prefs, page, go, nav, Modifier.fillMaxSize(), insets = false)
     }

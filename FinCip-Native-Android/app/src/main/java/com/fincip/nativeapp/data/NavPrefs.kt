@@ -10,12 +10,12 @@ object NavLayouts {
     val categories = listOf("Sidebar", "Top", "Bottom", "Floating", "Overlay")
     val all = listOf(
         NavLayout("drawer", "Slide-in drawer", "Sidebar", "The classic menu: tap the logo, pick from grouped sections.", "drawer", emptyList()),
-        NavLayout("rail", "Rail + flyout", "Sidebar", "A slim icon rail. Tap a section and its pages fly out beside it.", "side", listOf("flat" to "Flat", "floating" to "Floating", "glass" to "Glass")),
-        NavLayout("collapsible", "Collapsible sidebar", "Sidebar", "Permanent sidebar that folds to icons and unfolds to every page.", "side", listOf("flat" to "Flat", "floating" to "Floating", "glass" to "Glass")),
-        NavLayout("topTabs", "Two-level tabs", "Top", "Section tabs on top with that section's pages underneath.", "top", listOf("flat" to "Flat", "floating" to "Floating", "pill" to "Pill")),
-        NavLayout("topChips", "Chip strip", "Top", "One scrolling strip with every page in it.", "top", listOf("flat" to "Flat", "floating" to "Floating", "pill" to "Pill", "compact" to "Compact")),
-        NavLayout("bottomGroups", "Section tabs + pages", "Bottom", "Five section tabs, with the section's pages in a row above.", "bottom", listOf("flat" to "Classic", "floating" to "Floating", "pill" to "Pill", "curved" to "Curved", "compact" to "Compact")),
-        NavLayout("bottomMore", "Quick tabs + More", "Bottom", "Your four main pages, plus More for a full-page picker.", "bottom", listOf("flat" to "Classic", "floating" to "Floating", "pill" to "Pill", "curved" to "Curved", "compact" to "Compact")),
+        NavLayout("rail", "Rail + flyout", "Sidebar", "A slim floating glass rail. Tap a section and its pages slide out as a row of pills.", "overlay", listOf("flat" to "Flat", "floating" to "Floating", "glass" to "Glass")),
+        NavLayout("collapsible", "Collapsible sidebar", "Sidebar", "A floating glass sidebar that folds to icons and unfolds to every page.", "overlay", listOf("flat" to "Flat", "floating" to "Floating", "glass" to "Glass")),
+        NavLayout("topTabs", "Two-level tabs", "Top", "Floating section tabs, with that section's pages in a separate floating pill below.", "overlay", listOf("flat" to "Flat", "floating" to "Floating", "pill" to "Pill")),
+        NavLayout("topChips", "Chip strip", "Top", "Four floating main tabs. Tap one and its pages pop out as circles.", "overlay", listOf("flat" to "Flat", "floating" to "Floating", "pill" to "Pill", "compact" to "Compact")),
+        NavLayout("bottomGroups", "Section tabs + pages", "Bottom", "Floating section tabs, with that section's pages in a separate pill above.", "overlay", listOf("flat" to "Classic", "floating" to "Floating", "pill" to "Pill", "curved" to "Curved", "compact" to "Compact")),
+        NavLayout("bottomMore", "Quick tabs + More", "Bottom", "Your four main pages, plus More for a full-page picker.", "overlay", listOf("flat" to "Classic", "floating" to "Floating", "pill" to "Pill", "curved" to "Curved", "compact" to "Compact")),
         NavLayout("dock", "Floating dock", "Floating", "Four main tabs floating over your content. Tap one and its pages pop up as circles.", "overlay", listOf("rounded" to "Rounded", "glass" to "Glass", "minimal" to "Minimal icons", "labels" to "With labels")),
         NavLayout("pillMenu", "Expanding pill", "Floating", "A small floating pill of sections. Tap one and its pages pop up as circles.", "overlay", listOf("pill" to "Solid", "glass" to "Glass")),
         NavLayout("fab", "Fan menu button", "Floating", "One floating button that fans out into sections.", "overlay", listOf("round" to "Solid", "glass" to "Glass")),
@@ -39,6 +39,9 @@ data class NavPrefs(
     val height: Int = 64
 ) {
     val isDefaultDrawer: Boolean get() = layout == NavLayouts.DRAWER
+    /** Space (dp) floating bars take at the bottom / top, so pages can scroll past them. */
+    val bottomInset: Int get() = when (layout) { "bottomGroups" -> height + 96; "bottomMore", "dock", "pillMenu" -> height + 44; else -> 0 }
+    val topInset: Int get() = when (layout) { "topChips" -> height + 24; "topTabs" -> height + 84; else -> 0 }
     val region: String get() = NavLayouts.of(layout).region
 
     fun toJson(): JsonObject = JsonObject().apply {

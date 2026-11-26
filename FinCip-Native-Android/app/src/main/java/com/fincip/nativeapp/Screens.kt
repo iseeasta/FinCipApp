@@ -119,7 +119,7 @@ val LocalEmbedded = androidx.compose.runtime.compositionLocalOf { false }
 @Composable
 private fun PageColumn(content: @Composable ColumnScope.() -> Unit) {
     if (LocalEmbedded.current) Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(14.dp), content = content)
-    else Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 24.dp + com.fincip.nativeapp.ui.LocalNavInset.current), verticalArrangement = Arrangement.spacedBy(14.dp), content = content)
+    else Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(start = 16.dp, end = 16.dp, top = 8.dp + com.fincip.nativeapp.ui.LocalNavTop.current, bottom = 24.dp + com.fincip.nativeapp.ui.LocalNavInset.current), verticalArrangement = Arrangement.spacedBy(14.dp), content = content)
 }
 
 /** Soft header card: pale green block with leaf blobs, big title, short description and the FinCip mark. */
@@ -313,30 +313,18 @@ fun TransactionsScreen(workspace: JsonObject, month: String, privacy: Boolean, q
 @Composable
 private fun TransactionCard(item: JsonObject, privacy: Boolean, onClick: () -> Unit, onDelete: () -> Unit) {
     val income = com.fincip.nativeapp.data.isInflow(item)
-    NeoCard {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            com.fincip.nativeapp.ui.CategoryBadge(if (item.string("type") == "transfer") "Transfer" else item.string("category", "Other"), 46.dp)
-            Column(Modifier.weight(1f)) {
-                Text(item.string("title", "Transaction"), fontWeight = FontWeight.Black)
-                Text("${item.string("category", "Other")} · ${item.string("date")} · ${item.string("account", "Account")}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .65f))
-                val extra = listOf(item.string("person"), item.string("project")).filter { it.isNotBlank() }.joinToString(" · ")
-                if (extra.isNotBlank()) Text(extra, style = MaterialTheme.typography.labelSmall)
-            }
-            Column(horizontalAlignment = Alignment.End) {
-                Text(com.fincip.nativeapp.ui.directionLabel(item.string("type")), fontSize = 9.sp, fontWeight = FontWeight.Black, letterSpacing = .8.sp, color = (if (income) Green else Red).copy(alpha = .8f))
-                Text(if (privacy) "••••" else (if (income) "+" else "−") + money(item.double("amount"), item.string("currency", "INR")), color = if (income) Green else Red, fontWeight = FontWeight.Black)
-                Row {
-                    Text("Edit", style = MaterialTheme.typography.labelSmall, modifier = Modifier.clickable(onClick = onClick).padding(4.dp))
-                    Text("×", style = MaterialTheme.typography.labelMedium, modifier = Modifier.clickable(onClick = onDelete).padding(4.dp))
-                }
-            }
-        }
-        val splits = item.arrayOrEmpty("splits").objects()
-        if (splits.isNotEmpty()) {
+    val extra = listOf(item.string("person"), item.string("project")).filter { it.isNotBlank() }.joinToString(" · ")
+    val splits = item.arrayOrEmpty("splits").objects()
+    com.fincip.nativeapp.ui.TxRow(
+        item.string("title", "Transaction"), item.string("category", "Other"), item.string("type"), item.string("date"),
+        if (privacy) "••••" else (if (income) "+" else "−") + money(item.double("amount"), item.string("currency", "INR")), income, onClick,
+        note = extra,
+        trailing = { Text("×", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .45f), modifier = Modifier.clickable(onClick = onDelete).padding(start = 2.dp, top = 6.dp, bottom = 6.dp, end = 2.dp)) },
+        footer = if (splits.isEmpty()) null else ({
             Divider(Modifier.padding(vertical = 7.dp))
             splits.forEach { Text("• ${it.string("category")}: ${money(it.double("amount"), item.string("currency", "INR"))}", style = MaterialTheme.typography.bodySmall) }
-        }
-    }
+        })
+    )
 }
 
 @Composable

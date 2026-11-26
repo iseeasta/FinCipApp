@@ -117,6 +117,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.foundation.border
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.platform.LocalContext
@@ -760,6 +762,7 @@ private fun FinCipApp(store: FinanceStore, securePrefs: SecurePrefs) {
             val wide = LocalConfiguration.current.screenWidthDp >= 600
             val navPrefs = remember(workspace) { com.fincip.nativeapp.data.NavPrefs.fromJson(workspace.objectOrEmpty("settings").get("navPrefs")?.takeIf { it.isJsonObject }?.asJsonObject) }
             val navState = com.fincip.nativeapp.ui.rememberNavState()
+            var headerBottomPx by androidx.compose.runtime.remember { androidx.compose.runtime.mutableFloatStateOf(0f) }
             androidx.compose.runtime.LaunchedEffect(navPrefs.isDefaultDrawer) {
                 sidebarExpanded = if (navPrefs.isDefaultDrawer) (wide && context.getSharedPreferences("fincip_ui", 0).getBoolean("sidebar_expanded", true)) else false
                 navState.closeAll()
@@ -808,13 +811,12 @@ private fun FinCipApp(store: FinanceStore, securePrefs: SecurePrefs) {
             Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).background(androidx.compose.ui.graphics.Brush.radialGradient(listOf(glowA.copy(alpha = .38f), Color.Transparent), center = androidx.compose.ui.geometry.Offset(120f, 300f), radius = 900f)).background(androidx.compose.ui.graphics.Brush.radialGradient(listOf(glowB.copy(alpha = .30f), Color.Transparent), center = androidx.compose.ui.geometry.Offset(200f, 2200f), radius = 1000f))) {
               Row(Modifier.fillMaxSize()) {
                 Spacer(Modifier.width(if (wide) pushW else 0.dp))
-                com.fincip.nativeapp.ui.NavSide(navPrefs, page, ::navGo, navState, Modifier.statusBarsPadding().navigationBarsPadding())
                 Box(Modifier.weight(1f).then(if (!wide) Modifier.offset(x = pushW).clip(RoundedCornerShape(topStart = corner, bottomStart = corner)) else Modifier)) {
             Scaffold(
                 containerColor = MaterialTheme.colorScheme.background,
                 contentWindowInsets = WindowInsets(0, 0, 0, 0),
                 topBar = {
-                  Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.background).statusBarsPadding()) {
+                  Column(Modifier.fillMaxWidth().onGloballyPositioned { headerBottomPx = it.boundsInRoot().bottom }.background(MaterialTheme.colorScheme.background).statusBarsPadding()) {
                     Row(
                         Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -829,7 +831,6 @@ private fun FinCipApp(store: FinanceStore, securePrefs: SecurePrefs) {
                         if (!navPrefs.isDefaultDrawer) IconButton(modifier = Modifier.size(42.dp).background(MaterialTheme.colorScheme.surface, CircleShape), onClick = { startVoice() }) { Icon(androidx.compose.material.icons.Icons.Default.Mic, contentDescription = "Voice entry", modifier = Modifier.size(20.dp)) }
                         IconButton(modifier = Modifier.size(42.dp).background(MaterialTheme.colorScheme.surface, CircleShape), onClick = { updateWorkspace { root -> val settings = root.objectOrEmpty("settings"); settings.addProperty("privacyMode", !settings.bool("privacyMode")); root.add("settings", settings) } }) { Icon(if (privacy) Icons.Default.VisibilityOff else Icons.Default.Visibility, contentDescription = "Toggle privacy", modifier = Modifier.size(20.dp)) }
                     }
-                    com.fincip.nativeapp.ui.NavTop(navPrefs, page, ::navGo, navState)
                     if (!isPersonal) Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                         MonthMenu(month, transactions(workspace).map { it.string("date").take(7) }.toSet()) { month = it }
                     }
@@ -837,10 +838,9 @@ private fun FinCipApp(store: FinanceStore, securePrefs: SecurePrefs) {
                 }
                 ,
                 bottomBar = {
-                    com.fincip.nativeapp.ui.NavBottom(navPrefs, page, ::navGo, navState, Modifier.navigationBarsPadding())
                 }
             ) { innerPadding ->
-                androidx.compose.runtime.CompositionLocalProvider(com.fincip.nativeapp.ui.LocalNavInset provides (if (navPrefs.layout == "dock" || navPrefs.layout == "pillMenu") (navPrefs.height + 40).dp else 0.dp)) {
+                androidx.compose.runtime.CompositionLocalProvider(com.fincip.nativeapp.ui.LocalNavInset provides navPrefs.bottomInset.dp, com.fincip.nativeapp.ui.LocalNavTop provides navPrefs.topInset.dp) {
                 Column(Modifier.fillMaxSize().padding(innerPadding).then(if (navPrefs.region == "bottom") Modifier else Modifier.navigationBarsPadding())) {
                     AnimatedContent(targetState = page, transitionSpec = { (fadeIn(tween(240, delayMillis = 70)) + slideInVertically(tween(280)) { it / 18 }) togetherWith fadeOut(tween(120)) }, label = "page") { currentPage ->
                     when (currentPage.substringBefore(":")) {
@@ -1025,7 +1025,7 @@ private fun FinCipApp(store: FinanceStore, securePrefs: SecurePrefs) {
                   onTheme = { dark = !dark; context.getSharedPreferences("fincip_ui", 0).edit().putBoolean("dark", dark).apply() },
                   modifier = Modifier.align(Alignment.TopStart).offset(x = sidebarX)
               )
-              com.fincip.nativeapp.ui.NavOverlay(navPrefs, page, ::navGo, navState, Modifier.fillMaxSize())
+              com.fincip.nativeapp.ui.NavOverlay(navPrefs, page, ::navGo, navState, Modifier.fillMaxSize(), topOffset = with(androidx.compose.ui.platform.LocalDensity.current) { headerBottomPx.toDp() })
             }
         }
     }

@@ -205,7 +205,7 @@ fun AnalyticsOverview(
     val monthList = (5 downTo 0).map { monthEnd.minusMonths(it.toLong()) }
     val incomeSeries = monthList.map { incomeTotal(workspace, it.toString()) }
     val spendSeries = monthList.map { expenseTotal(workspace, it.toString()) }
-    Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 28.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+    Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(start = 16.dp, end = 16.dp, top = 4.dp + com.fincip.nativeapp.ui.LocalNavTop.current, bottom = 28.dp + com.fincip.nativeapp.ui.LocalNavInset.current), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         widgets.forEach { id ->
             when (id) {
                 "pet" -> petSlot()
@@ -332,20 +332,8 @@ fun AnalyticsOverview(
             shown.forEach { tx ->
                 val isIncome = com.fincip.nativeapp.data.isInflow(tx)
                 val title = tx.string("title").ifBlank { tx.string("category", "Entry") }
-                Surface(Modifier.fillMaxWidth().clickable { onEditTx(tx) }, shape = RoundedCornerShape(20.dp), color = scheme.surface, border = BorderStroke(1.dp, scheme.outlineVariant)) {
-                    Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        com.fincip.nativeapp.ui.CategoryBadge(if (tx.string("type") == "transfer") "Transfer" else tx.string("category", "Other"), 44.dp)
-                        Column(Modifier.weight(1f)) {
-                            Text(title, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            Text("${tx.string("category", "Other")} · ${tx.string("date")}", fontSize = 12.sp, color = scheme.onSurface.copy(alpha = .6f), maxLines = 1)
-                        }
-                        val amt = toBase(workspace, tx.double("amount"), tx.string("currency", "INR"))
-                        Column(horizontalAlignment = Alignment.End) {
-                            Text(com.fincip.nativeapp.ui.directionLabel(tx.string("type")), fontSize = 9.sp, fontWeight = FontWeight.Black, letterSpacing = .8.sp, color = (if (isIncome) Pop.Teal else Pop.Coral).copy(alpha = .85f))
-                            Text(if (privacy) mask else (if (isIncome) "+" else "−") + money(amt, base), fontWeight = FontWeight.Bold, color = if (isIncome) Pop.Teal else Pop.Coral, maxLines = 1)
-                        }
-                    }
-                }
+                val amt = toBase(workspace, tx.double("amount"), tx.string("currency", "INR"))
+                com.fincip.nativeapp.ui.TxRow(title, tx.string("category", "Other"), tx.string("type"), tx.string("date"), if (privacy) mask else (if (isIncome) "+" else "−") + money(amt, base), isIncome, { onEditTx(tx) })
             }
         }
                 }

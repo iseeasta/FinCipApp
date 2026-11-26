@@ -58,7 +58,7 @@ fun DataIOScreen(
     onSetOpening: (Double) -> Unit = {}
 ) {
     var tab by rememberSaveable { mutableIntStateOf(0) }
-    Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 28.dp + LocalNavInset.current), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+    Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(start = 16.dp, end = 16.dp, top = 8.dp + LocalNavTop.current, bottom = 28.dp + LocalNavInset.current), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         NeoTitle("Your data, portable", if (tab == 0) "Import transactions" else "Export your financial data", if (tab == 0) "Bring in a CSV from a bank, UPI app, spreadsheet or another tracker. Every row lands on its real date." else "Choose how you want to export your transactions.")
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             PopChip("Import", tab == 0, { tab = 0 }); PopChip("Export", tab == 1, { tab = 1 })

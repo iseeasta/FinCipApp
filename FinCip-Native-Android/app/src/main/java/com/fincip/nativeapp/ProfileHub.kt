@@ -108,7 +108,7 @@ fun ProfileHub(
     settingsContent: @Composable (String) -> Unit,
     securityContent: @Composable () -> Unit
 ) {
-    Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 32.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+    Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(start = 16.dp, end = 16.dp, top = 8.dp + com.fincip.nativeapp.ui.LocalNavTop.current, bottom = 32.dp + com.fincip.nativeapp.ui.LocalNavInset.current), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         CompositionLocalProvider(LocalEmbedded provides true) {
             when (initialTab) {
                 0 -> ProfilePage(workspace, onProfileChange, onNavigate)

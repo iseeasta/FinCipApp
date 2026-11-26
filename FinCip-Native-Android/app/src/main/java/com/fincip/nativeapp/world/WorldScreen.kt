@@ -169,7 +169,7 @@ fun WorldScreen(workspace: JsonObject, onSave: (JsonObject.() -> Unit) -> Unit) 
         }
     }
 
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(top = com.fincip.nativeapp.ui.LocalNavTop.current)) {
         Box(Modifier.fillMaxWidth().height(430.dp).clip(RoundedCornerShape(22.dp))) {
             Canvas(
                 Modifier.fillMaxSize()
