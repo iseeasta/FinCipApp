@@ -115,7 +115,7 @@ fun MascotStudioScreen(workspace: JsonObject, petLevel: Int, onSave: (JsonObject
         }
         Row(Modifier.padding(horizontal = 16.dp).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             ActionPill("Reset", Modifier.weight(1f)) { pick(MascotLook.defaultFor(look.character).copy(useAsLogo = look.useAsLogo)) }
-            ActionPill("Random", Modifier.weight(1f)) { pick(MascotLook.random(look, java.util.Random(), petLevel)) }
+            ActionPill("Random", Modifier.weight(1f)) { pick(MascotLook.random(look, kotlin.random.Random.Default, petLevel)) }
             ActionPill("Preview", Modifier.weight(1f)) { tap(); preview = true }
             ActionPill(if (dirty) "Save" else "Saved", Modifier.weight(1f), filled = true) {
                 val s = look.sanitized().let { if (unlocked) it else it.forLevel(petLevel) }
