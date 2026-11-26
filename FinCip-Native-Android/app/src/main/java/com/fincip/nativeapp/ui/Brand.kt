@@ -43,6 +43,8 @@ fun FinCipMark(
     glyph: Color = MaterialTheme.colorScheme.onSurface,
     accent: Color = FinCipLime
 ) {
+    val mascot = MascotRuntime.look
+    if (mascot != null && mascot.useAsLogo) { MascotView(mascot, size, modifier, animated = false, rounded = true); return }
     val leaves = androidx.compose.runtime.remember { LeafPaths.map { PathParser().parsePathString(it).toPath() } }
     val shoot = androidx.compose.runtime.remember { PathParser().parsePathString(AccentPath).toPath() }
     Canvas(modifier.size(size)) {

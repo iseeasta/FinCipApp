@@ -725,6 +725,7 @@ private fun FinCipApp(store: FinanceStore, securePrefs: SecurePrefs) {
     }
     fun startVoice() { runCatching { voiceLauncher.launch(Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM).putExtra(RecognizerIntent.EXTRA_PROMPT, "Describe your money move")) }.onFailure { notify("Voice input is not available on this device") } }
     val notificationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
+    LaunchedEffect(workspace) { com.fincip.nativeapp.ui.MascotRuntime.look = com.fincip.nativeapp.ui.mascotOf(workspace) }
     LaunchedEffect(Unit) { if (Build.VERSION.SDK_INT >= 33) notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS) }
 
     FinCipTheme(vibe, dark, accent) {
@@ -889,6 +890,7 @@ private fun FinCipApp(store: FinanceStore, securePrefs: SecurePrefs) {
                         "portfolio" -> PortfolioScreen(workspace, privacy, { openForm("investment") }, { deleteFromArray("investments", it.string("id")) })
                         "forecast" -> ForecastScreen(workspace, privacy)
                         "insights" -> InsightsScreen(workspace, month, privacy)
+                        "mascot" -> com.fincip.nativeapp.ui.MascotStudioScreen(workspace, petProgress(workspace).level) { block -> updateWorkspace { root -> root.block() } }
                         "world" -> com.fincip.nativeapp.world.WorldScreen(workspace) { block -> updateWorkspace { root -> val w = root.objectOrEmpty("world"); w.block(); root.add("world", w) } }
                         "rules" -> RulesScreen(workspace, { openForm("rule") }, {
                             updateWorkspace { root ->
