@@ -27,6 +27,10 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Icon
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.AlternateEmail
+import androidx.compose.material.icons.filled.LocationCity
+import androidx.compose.material.icons.filled.EditNote
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
