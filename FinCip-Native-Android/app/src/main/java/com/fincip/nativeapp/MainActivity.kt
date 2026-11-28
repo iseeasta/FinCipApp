@@ -1034,9 +1034,9 @@ private fun FinCipApp(store: FinanceStore, securePrefs: SecurePrefs) {
     }
 
     if (editingProfile) {
-        androidx.compose.ui.window.Dialog(onDismissRequest = { editingProfile = false }, properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)) {
+        androidx.compose.ui.window.Dialog(onDismissRequest = { editingProfile = false }, properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
             FinCipTheme(vibe, dark, accent) {
-                Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).statusBarsPadding()) {
+                Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).statusBarsPadding().navigationBarsPadding().imePadding()) {
                     ProfileForm(profileOf(workspace), "Save profile", { saveProfile(it); editingProfile = false }, onCancel = { editingProfile = false })
                 }
             }

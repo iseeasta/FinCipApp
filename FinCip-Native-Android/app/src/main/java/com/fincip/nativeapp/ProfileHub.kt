@@ -26,6 +26,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -39,6 +40,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -166,8 +169,35 @@ private fun HubHeader(workspace: JsonObject) {
 private fun SectionTitle(text: String) = Text(text, fontWeight = FontWeight.Black, style = MaterialTheme.typography.titleLarge)
 
 @Composable
-private fun ProfileEditor(profile: JsonObject, onChange: (JsonObject.() -> Unit) -> Unit) {
+private fun StyleField(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, value: String, hint: String, onChange: (String) -> Unit, singleLine: Boolean = true, minLines: Int = 1, counter: String? = null) {
+    val s = MaterialTheme.colorScheme
+    var focused by remember { mutableStateOf(false) }
+    val border by androidx.compose.animation.animateColorAsState(if (focused) s.primary else Color.Transparent, label = "fieldBorder")
+    Row(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(s.surfaceVariant.copy(alpha = .55f)).border(2.dp, border, RoundedCornerShape(20.dp)).padding(horizontal = 14.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.Top
+    ) {
+        Box(Modifier.size(38.dp).clip(CircleShape).background(s.primary.copy(alpha = .14f)), contentAlignment = Alignment.Center) { Icon(icon, null, tint = s.primary, modifier = Modifier.size(19.dp)) }
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f)) {
+            Text(label.uppercase(), fontSize = 10.sp, fontWeight = FontWeight.Black, letterSpacing = 1.1.sp, color = s.onSurface.copy(alpha = .5f))
+            androidx.compose.foundation.text.BasicTextField(
+                value = value, onValueChange = onChange, singleLine = singleLine, minLines = minLines,
+                textStyle = androidx.compose.ui.text.TextStyle(color = s.onSurface, fontSize = 16.sp, fontWeight = FontWeight.SemiBold),
+                cursorBrush = androidx.compose.ui.graphics.SolidColor(s.primary),
+                modifier = Modifier.fillMaxWidth().padding(top = 2.dp).onFocusChanged { focused = it.isFocused },
+                decorationBox = { inner -> Box { if (value.isEmpty()) Text(hint, fontSize = 16.sp, color = s.onSurface.copy(alpha = .3f)); inner() } }
+            )
+            if (counter != null) Text(counter, Modifier.fillMaxWidth().padding(top = 4.dp), fontSize = 11.sp, textAlign = androidx.compose.ui.text.style.TextAlign.End, color = s.onSurface.copy(alpha = .45f))
+        }
+    }
+}
+
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@Composable
+private fun ProfileEditor(profile: JsonObject, onChange: (JsonObject.() -> Unit) -> Unit, onClose: () -> Unit) {
     val tap = rememberTap()
+    val s = MaterialTheme.colorScheme
     var name by remember { mutableStateOf(profile.string("name")) }
     var handle by remember { mutableStateOf(profile.string("handle")) }
     var bio by remember { mutableStateOf(profile.string("bio")) }
@@ -175,77 +205,93 @@ private fun ProfileEditor(profile: JsonObject, onChange: (JsonObject.() -> Unit)
     var role by remember { mutableStateOf(profile.string("tagline")) }
     var seed by remember { mutableStateOf(profile.double("avatarSeed").toLong()) }
     var banner by remember { mutableIntStateOf(profile.double("banner").toInt()) }
-    var saved by remember { mutableStateOf(false) }
     val valid = name.trim().length >= 2
-    NeoCard {
-        SectionTitle("Your avatar")
-        Spacer(Modifier.height(10.dp))
-        val ctx = androidx.compose.ui.platform.LocalContext.current
-        val mode = profile.string("avatarMode", "seed")
-        val photoPicker = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.GetContent()) { uri ->
-            if (uri != null && com.fincip.nativeapp.ui.saveUserImage(ctx, uri, false)) onChange { addProperty("avatarMode", "photo"); addProperty("photoStamp", System.currentTimeMillis()) }
-        }
-        val bannerPicker = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.GetContent()) { uri ->
-            if (uri != null && com.fincip.nativeapp.ui.saveUserImage(ctx, uri, true)) onChange { addProperty("bannerMode", "photo"); addProperty("bannerStamp", System.currentTimeMillis()) }
-        }
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-            com.fincip.nativeapp.ui.UserAvatar(profileOf(JsonObject().apply { add("profile", profile) }), size = 84.dp)
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                NeoOutlineButton("Upload photo", { photoPicker.launch("image/*") })
-                NeoOutlineButton("Shuffle face", { seed = java.util.Random().nextLong() and 0x7fffffffL; saved = false; onChange { addProperty("avatarSeed", seed); addProperty("avatarMode", "seed") } })
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    val mode = profile.string("avatarMode", "seed")
+    val photoPicker = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.GetContent()) { uri ->
+        if (uri != null && com.fincip.nativeapp.ui.saveUserImage(ctx, uri, false)) onChange { addProperty("avatarMode", "photo"); addProperty("photoStamp", System.currentTimeMillis()) }
+    }
+    val bannerPicker = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.GetContent()) { uri ->
+        if (uri != null && com.fincip.nativeapp.ui.saveUserImage(ctx, uri, true)) onChange { addProperty("bannerMode", "photo"); addProperty("bannerStamp", System.currentTimeMillis()) }
+    }
+    Column(Modifier.fillMaxWidth().imePadding(), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        // ---- header: banner + avatar + live name
+        Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(30.dp)).background(s.surface)) {
+            Box(Modifier.fillMaxWidth()) {
+                val bannerImg = if (profile.string("bannerMode") == "photo") com.fincip.nativeapp.ui.rememberUserImage(ctx, true, profile.double("bannerStamp").toLong()) else null
+                if (bannerImg != null) androidx.compose.foundation.Image(bannerImg, null, Modifier.fillMaxWidth().height(110.dp), contentScale = androidx.compose.ui.layout.ContentScale.Crop)
+                else Box(Modifier.fillMaxWidth().height(110.dp).background(Brush.linearGradient(Banners[banner.coerceIn(0, Banners.lastIndex)])))
+                Row(Modifier.align(Alignment.TopEnd).padding(10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Banner photo", Modifier.clip(RoundedCornerShape(50)).background(Color.Black.copy(alpha = .35f)).clickable { tap(); bannerPicker.launch("image/*") }.padding(horizontal = 12.dp, vertical = 6.dp), color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                }
+                Box(Modifier.align(Alignment.BottomStart).offset(x = 20.dp, y = 40.dp).background(s.surface, CircleShape).padding(5.dp)) { com.fincip.nativeapp.ui.UserAvatar(profileOf(JsonObject().apply { add("profile", profile) }), size = 84.dp) }
             }
+            Spacer(Modifier.height(48.dp))
+            Column(Modifier.padding(horizontal = 20.dp)) {
+                Text(name.ifBlank { "Your name" }, fontWeight = FontWeight.Black, fontSize = 24.sp, maxLines = 1, letterSpacing = (-0.4).sp, color = if (name.isBlank()) s.onSurface.copy(alpha = .3f) else s.onSurface)
+                Text(if (handle.isBlank()) "@username" else "@$handle", color = s.onSurface.copy(alpha = .5f), fontSize = 14.sp)
+            }
+            Spacer(Modifier.height(12.dp))
+            Row(Modifier.padding(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Upload photo", Modifier.clip(RoundedCornerShape(50)).background(s.primary).clickable { tap(); photoPicker.launch("image/*") }.padding(horizontal = 16.dp, vertical = 9.dp), color = s.onPrimary, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                Text("Shuffle face", Modifier.clip(RoundedCornerShape(50)).background(s.primary.copy(alpha = .14f)).clickable { tap(); seed = java.util.Random().nextLong() and 0x7fffffffL; onChange { addProperty("avatarSeed", seed); addProperty("avatarMode", "seed") } }.padding(horizontal = 16.dp, vertical = 9.dp), color = s.primary, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+            }
+            Spacer(Modifier.height(16.dp))
         }
-        Spacer(Modifier.height(14.dp))
-        Text("Characters", fontWeight = FontWeight.Bold)
-        Spacer(Modifier.height(8.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.horizontalScroll(rememberScrollState())) {
-            com.fincip.nativeapp.ui.AvatarPresets.forEachIndexed { i, look ->
-                val on = mode == "preset" && profile.double("preset").toInt() == i
-                Box(Modifier.size(60.dp).clip(CircleShape).border(if (on) 3.dp else 1.dp, if (on) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline, CircleShape).clickable { tap(); onChange { addProperty("avatarMode", "preset"); addProperty("preset", i) } }) {
-                    com.fincip.nativeapp.ui.PetCharacter(look, com.fincip.nativeapp.ui.PetMood.HAPPY, 6, diameter = 60.dp)
+
+        // ---- characters + banner colours
+        NeoCard {
+            Text("PICK A CHARACTER", fontSize = 11.sp, fontWeight = FontWeight.Black, letterSpacing = 1.2.sp, color = s.onSurface.copy(alpha = .5f))
+            Spacer(Modifier.height(10.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.horizontalScroll(rememberScrollState())) {
+                com.fincip.nativeapp.ui.AvatarPresets.forEachIndexed { i, look ->
+                    val on = mode == "preset" && profile.double("preset").toInt() == i
+                    Box(Modifier.size(60.dp).clip(CircleShape).border(if (on) 3.dp else 1.dp, if (on) s.primary else s.outline, CircleShape).clickable { tap(); onChange { addProperty("avatarMode", "preset"); addProperty("preset", i) } }) {
+                        com.fincip.nativeapp.ui.PetCharacter(look, com.fincip.nativeapp.ui.PetMood.HAPPY, 6, diameter = 60.dp)
+                    }
+                }
+            }
+            Spacer(Modifier.height(16.dp))
+            Text("BANNER COLOUR", fontSize = 11.sp, fontWeight = FontWeight.Black, letterSpacing = 1.2.sp, color = s.onSurface.copy(alpha = .5f))
+            Spacer(Modifier.height(10.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.horizontalScroll(rememberScrollState())) {
+                Banners.forEachIndexed { i, colors ->
+                    Box(Modifier.size(width = 64.dp, height = 36.dp).clip(RoundedCornerShape(12.dp)).background(Brush.linearGradient(colors))
+                        .border(if (banner == i) 3.dp else 1.dp, if (banner == i) s.primary else s.outline, RoundedCornerShape(12.dp))
+                        .clickable { tap(); banner = i; onChange { addProperty("banner", i); addProperty("bannerMode", "color") } })
                 }
             }
         }
-        Spacer(Modifier.height(14.dp))
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("Banner", fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-            NeoOutlineButton("Upload banner", { bannerPicker.launch("image/*") })
-        }
-        Spacer(Modifier.height(8.dp))
-        Text("Banner colours", style = MaterialTheme.typography.labelMedium)
-        Spacer(Modifier.height(6.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.horizontalScroll(rememberScrollState())) {
-            Banners.forEachIndexed { i, colors ->
-                Box(Modifier.size(width = 64.dp, height = 36.dp).clip(RoundedCornerShape(10.dp)).background(Brush.linearGradient(colors))
-                    .border(if (banner == i) 3.dp else 1.dp, if (banner == i) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline, RoundedCornerShape(10.dp))
-                    .clickable { tap(); banner = i; saved = false; onChange { addProperty("banner", i); addProperty("bannerMode", "color") } })
+
+        // ---- details
+        NeoCard {
+            Text("ABOUT YOU", fontSize = 11.sp, fontWeight = FontWeight.Black, letterSpacing = 1.2.sp, color = s.onSurface.copy(alpha = .5f))
+            Spacer(Modifier.height(12.dp))
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                StyleField(androidx.compose.material.icons.Icons.Default.Person, "Display name", name, "How should we call you?", { name = it.take(40) })
+                if (!valid) Text("Name needs at least 2 characters.", color = s.error, fontSize = 12.sp)
+                StyleField(androidx.compose.material.icons.Icons.Default.AlternateEmail, "Username", handle, "letters, numbers, _ and .", { handle = it.lowercase().filter { c -> c.isLetterOrDigit() || c == '_' || c == '.' }.take(20) })
+                StyleField(androidx.compose.material.icons.Icons.Default.LocationCity, "City", city, "Where are you based?", { city = it.take(40) })
+                StyleField(androidx.compose.material.icons.Icons.Default.EditNote, "Short bio", bio, "A line about your money goals", { bio = it.take(140) }, singleLine = false, minLines = 3, counter = "${bio.length}/140")
             }
+            Spacer(Modifier.height(16.dp))
+            Text("I AM A…", fontSize = 11.sp, fontWeight = FontWeight.Black, letterSpacing = 1.2.sp, color = s.onSurface.copy(alpha = .5f))
+            Spacer(Modifier.height(10.dp))
+            androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) { Roles.forEach { r -> PopChip(r, role == r, { tap(); role = r }) } }
         }
-    }
-    NeoCard {
-        SectionTitle("About you")
-        Spacer(Modifier.height(8.dp))
-        PopField(name, { name = it; saved = false }, Modifier.fillMaxWidth(), label = { Text("Display name") }, singleLine = true)
-        if (!valid) Text("Name needs at least 2 characters.", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.labelSmall)
-        Spacer(Modifier.height(10.dp))
-        PopField(handle, { handle = it.lowercase().filter { c -> c.isLetterOrDigit() || c == '_' || c == '.' }.take(20); saved = false }, Modifier.fillMaxWidth(), label = { Text("Username") }, singleLine = true)
-        Spacer(Modifier.height(10.dp))
-        Text("I am a…", fontWeight = FontWeight.Bold)
-        Spacer(Modifier.height(6.dp))
-        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) { Roles.forEach { r -> PopChip(r, role == r, { role = r; saved = false }) } }
-        Spacer(Modifier.height(10.dp))
-        PopField(city, { city = it.take(40); saved = false }, Modifier.fillMaxWidth(), label = { Text("City") }, singleLine = true)
-        Spacer(Modifier.height(10.dp))
-        PopField(bio, { bio = it.take(140); saved = false }, Modifier.fillMaxWidth(), label = { Text("Short bio (${bio.length}/140)") })
-        Spacer(Modifier.height(14.dp))
-        NeoButton(if (saved) "Saved ✓" else "Save profile", Modifier.fillMaxWidth(), onClick = {
-            onChange {
-                addProperty("name", name.trim()); addProperty("handle", handle); addProperty("tagline", role); addProperty("avatarSeed", seed)
-                addProperty("bio", bio.trim()); addProperty("city", city.trim()); addProperty("banner", banner)
-                if (!has("joined")) addProperty("joined", java.time.LocalDate.now().toString())
-            }
-            saved = true
-        }, enabled = valid && !saved)
+
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            NeoOutlineButton("Cancel", { onClose() }, Modifier.weight(1f))
+            NeoButton("Save changes", Modifier.weight(2f), onClick = {
+                onChange {
+                    addProperty("name", name.trim()); addProperty("handle", handle); addProperty("tagline", role); addProperty("avatarSeed", seed)
+                    addProperty("bio", bio.trim()); addProperty("city", city.trim()); addProperty("banner", banner)
+                    if (!has("joined")) addProperty("joined", java.time.LocalDate.now().toString())
+                }
+                onClose()
+            }, enabled = valid)
+        }
+        Spacer(Modifier.height(24.dp))
     }
 }
 
@@ -510,6 +556,8 @@ private fun ProfilePage(workspace: JsonObject, onProfileChange: (JsonObject.() -
     val scheme = MaterialTheme.colorScheme
     val tap = rememberTap()
     var editing by remember { mutableStateOf(false) }
+    androidx.activity.compose.BackHandler(editing) { editing = false }
+    if (editing) { ProfileEditor(workspace.objectOrEmpty("profile"), onProfileChange) { editing = false }; return }
     val p = profileOf(workspace)
     val raw = workspace.objectOrEmpty("profile")
     val prog = petProgress(workspace)
@@ -632,13 +680,4 @@ private fun ProfilePage(workspace: JsonObject, onProfileChange: (JsonObject.() -
         if (nextAcc != null) Text("Next unlock: ${nextAcc.first} at level ${nextAcc.second}", Modifier.padding(top = 8.dp), fontSize = 12.sp, color = scheme.onSurface.copy(alpha = .55f))
     }
 
-    if (editing) {
-        androidx.compose.ui.window.Dialog(onDismissRequest = { editing = false }, properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)) {
-            Column(Modifier.fillMaxSize().background(scheme.background).statusBarsPadding().navigationBarsPadding().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                Text("Edit profile", fontWeight = FontWeight.Black, fontSize = 24.sp)
-                ProfileEditor(raw, onProfileChange)
-                NeoButton("Done", Modifier.fillMaxWidth(), onClick = { editing = false })
-            }
-        }
-    }
 }
