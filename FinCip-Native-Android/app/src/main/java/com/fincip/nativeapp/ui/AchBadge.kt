@@ -56,7 +56,7 @@ fun DrawScope.drawBadge(glyph: Int, shape: Int, hue: Int, tier: Int, locked: Boo
         4 -> poly(4, r * 1.2f, (PI / 4 * 2).toFloat(), .86f)
         5 -> poly(8, r * 1.04f, (PI / 8).toFloat())
         6 -> Path().apply { for (i in 0 until 8) { val a = i * 2 * PI.toFloat() / 8; addOval(androidx.compose.ui.geometry.Rect(o(cx + r * .62f * cos(a) - r * .42f, cy + r * .62f * sin(a) - r * .42f), sz(r * .84f, r * .84f))) }; addOval(androidx.compose.ui.geometry.Rect(o(cx - r * .8f, cy - r * .8f), sz(r * 1.6f, r * 1.6f))) }
-        7 -> Path().apply { addRoundRect(androidx.compose.ui.geometry.RoundRect(o(cx - r, cy - r), sz(2 * r, 2 * r), CornerRadius(r * .5f * u))) }
+        7 -> Path().apply { addRoundRect(androidx.compose.ui.geometry.RoundRect(androidx.compose.ui.geometry.Rect(o(cx - r, cy - r), sz(2 * r, 2 * r)), CornerRadius(r * .5f * u))) }
         8 -> Path().apply { moveTo(cx * u, (cy - r * 1.18f) * u); cubicTo((cx + r * .5f) * u, (cy - r * .5f) * u, (cx + r) * u, (cy + r * .1f) * u, (cx + r * .9f) * u, (cy + r * .45f) * u); cubicTo((cx + r * .7f) * u, (cy + r * 1.0f) * u, (cx - r * .7f) * u, (cy + r * 1.0f) * u, (cx - r * .9f) * u, (cy + r * .45f) * u); cubicTo((cx - r) * u, (cy + r * .1f) * u, (cx - r * .5f) * u, (cy - r * .5f) * u, cx * u, (cy - r * 1.18f) * u); close() }
         else -> poly(5, r * 1.08f, (-PI / 2).toFloat())
     }
