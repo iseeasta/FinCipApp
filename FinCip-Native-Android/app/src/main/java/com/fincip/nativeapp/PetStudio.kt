@@ -74,7 +74,7 @@ fun petLookOf(m: JsonObject): PetLook {
 
 /** Home-screen companion card. Reads the same customisation as the studio, so edits show up here instantly. */
 @Composable
-fun PetHomeCard(workspace: JsonObject, mood: PetMood, condition: String, streak: Int, onClick: () -> Unit) {
+fun PetHomeCard(workspace: JsonObject, mood: PetMood, condition: String, streak: Int, onClick: () -> Unit, onLevel: () -> Unit = {}) {
     val pet = workspace.objectOrEmpty("mascot")
     val name = pet.string("name", "Mochi")
     val look = petLookOf(pet)
@@ -108,7 +108,7 @@ fun PetHomeCard(workspace: JsonObject, mood: PetMood, condition: String, streak:
         Spacer(Modifier.height(10.dp))
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(name, fontWeight = FontWeight.Black, fontSize = 20.sp, color = fg, maxLines = 1)
-            Text("LVL ${prog.level}", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Black, color = bg, modifier = Modifier.clip(RoundedCornerShape(50)).background(fg).padding(horizontal = 9.dp, vertical = 3.dp))
+            Text("LVL ${prog.level}", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Black, color = bg, modifier = Modifier.clip(RoundedCornerShape(50)).background(fg).clickable { tap(); onLevel() }.padding(horizontal = 9.dp, vertical = 3.dp))
             Text("${PetStageNames[stage]} stage", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = fg.copy(alpha = .75f), modifier = Modifier.weight(1f), maxLines = 1)
             Text("Customize ›", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Black, color = fg, modifier = Modifier.clip(RoundedCornerShape(50)).border(1.5.dp, fg, RoundedCornerShape(50)).clickable { tap(); onClick() }.padding(horizontal = 10.dp, vertical = 4.dp))
         }

@@ -566,35 +566,6 @@ private fun ProfilePage(workspace: JsonObject, onProfileChange: (JsonObject.() -
         onChangeBanner = { studio = false; editing = true }, onDismiss = { studio = false }
     )
 
-    // ── Achievements
-    PHeader("Achievements", "${unlocked.size} / ${badges.size}")
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        badges.chunked(2).forEach { row ->
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                row.forEach { b ->
-                    Column(
-                        Modifier.weight(1f).clip(RoundedCornerShape(22.dp)).background(if (b.done) scheme.primary.copy(alpha = .15f) else scheme.surface).padding(14.dp),
-                        verticalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        Box(Modifier.size(44.dp).background(if (b.done) scheme.primary.copy(alpha = .28f) else scheme.onSurface.copy(alpha = .07f), CircleShape), contentAlignment = Alignment.Center) {
-                            Text(b.emoji, fontSize = 22.sp, modifier = Modifier.then(if (b.done) Modifier else Modifier.alpha(.35f)))
-                        }
-                        Text(b.title, fontWeight = FontWeight.Bold, fontSize = 14.sp, maxLines = 1)
-                        Text(b.desc, fontSize = 11.sp, color = scheme.onSurface.copy(alpha = .6f), lineHeight = 14.sp, maxLines = 2)
-                        if (b.done) Text("Unlocked", fontSize = 11.sp, fontWeight = FontWeight.Black, color = scheme.primary)
-                        else {
-                            Box(Modifier.fillMaxWidth().height(5.dp).clip(CircleShape).background(scheme.onSurface.copy(alpha = .1f))) {
-                                Box(Modifier.fillMaxWidth((b.cur.toFloat() / b.target).coerceIn(0.02f, 1f)).height(5.dp).clip(CircleShape).background(scheme.primary.copy(alpha = .7f)))
-                            }
-                            Text("${b.cur} / ${b.target}", fontSize = 11.sp, color = scheme.onSurface.copy(alpha = .55f))
-                        }
-                    }
-                }
-                if (row.size == 1) Spacer(Modifier.weight(1f))
-            }
-        }
-    }
-
     // ── Financial journey
     PHeader("Financial journey")
     val ym = java.time.YearMonth.now()

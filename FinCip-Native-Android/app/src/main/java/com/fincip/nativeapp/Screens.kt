@@ -257,7 +257,7 @@ private fun InlineAction(text: String, onClick: () -> Unit) {
 }
 
 @Composable
-fun OverviewScreen(workspace: JsonObject, month: String, privacy: Boolean, savingsRate: Double, balance: Double, onAdd: () -> Unit, onMascot: () -> Unit, onOpen: (String) -> Unit = {}, onNewGoal: () -> Unit = {}, onEditTx: (JsonObject) -> Unit = {}, onWidgets: (List<String>) -> Unit = {}) {
+fun OverviewScreen(workspace: JsonObject, month: String, privacy: Boolean, savingsRate: Double, balance: Double, onAdd: () -> Unit, onMascot: () -> Unit, onOpen: (String) -> Unit = {}, onNewGoal: () -> Unit = {}, onEditTx: (JsonObject) -> Unit = {}, onWidgets: (List<String>) -> Unit = {}, onAchievements: () -> Unit = {}) {
     val base = workspace.objectOrEmpty("settings").string("baseCurrency", "INR")
     val income = incomeTotal(workspace, month)
     val expenses = expenseTotal(workspace, month)
@@ -281,7 +281,7 @@ fun OverviewScreen(workspace: JsonObject, month: String, privacy: Boolean, savin
             val xp = allTransactions.size * 10 + workspace.arrayOrEmpty("budgets").size() * 25 + workspace.arrayOrEmpty("goals").size() * 25 + workspace.arrayOrEmpty("financeProducts").size() * 25 + (if (achievedGoal) 200 else 0)
             val level = xp / 100 + 1
             val condition = when { ramen -> "ramen"; achievedGoal -> "goal"; expenses > income && income > 0 -> "stress"; savingMood -> "saving"; streak >= 7 -> "streak"; allTransactions.isEmpty() -> "empty"; else -> "neutral" }
-            PetHomeCard(workspace, petMood, condition, streak, onMascot)
+            PetHomeCard(workspace, petMood, condition, streak, onMascot, onAchievements)
         }
     }, widgets = homeWidgetsOf(workspace), onWidgets = onWidgets)
 }
