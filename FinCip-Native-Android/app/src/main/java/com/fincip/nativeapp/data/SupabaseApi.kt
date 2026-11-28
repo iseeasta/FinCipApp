@@ -83,4 +83,25 @@ class SupabaseApi(private val baseUrl: String, private val anonKey: String) {
         }
         request("/rest/v1/shared_budgets", "POST", session.accessToken, body.toString(), "resolution=merge-duplicates,return=minimal")
     }
+
+    // ---- social (see supabase/migrations/002_social.sql)
+    private fun rpcJson(session: Session, name: String, body: JsonObject = JsonObject()) = request("/rest/v1/rpc/$name", "POST", session.accessToken, body.toString())
+
+    /** Creates or refreshes my public social profile and returns my QR token. */
+    fun ensureSocial(session: Session, handle: String, name: String, avatar: JsonObject, level: Int, signature: JsonObject): String {
+        val b = JsonObject().apply { addProperty("p_handle", handle); addProperty("p_name", name); add("p_avatar", avatar); addProperty("p_level", level); add("p_signature", signature) }
+        return rpcJson(session, "ensure_social", b).trim().trim('"')
+    }
+    fun followByQr(session: Session, token: String): JsonObject = JsonParser.parseString(rpcJson(session, "follow_by_qr", JsonObject().apply { addProperty("p_token", token) })).asJsonObject
+    fun rotateQr(session: Session): String = rpcJson(session, "rotate_qr").trim().trim('"')
+    fun socialSummary(session: Session): JsonObject = JsonParser.parseString(rpcJson(session, "social_summary")).asJsonObject
+    fun socialProfiles(session: Session): List<JsonObject> = JsonParser.parseString(request("/rest/v1/social_profiles?select=*", "GET", session.accessToken)).asJsonArray.map { it.asJsonObject }
+    fun followEdges(session: Session): List<JsonObject> = JsonParser.parseString(request("/rest/v1/follows?select=follower,followee", "GET", session.accessToken)).asJsonArray.map { it.asJsonObject }
+    fun unfollow(session: Session, userId: String) { request("/rest/v1/follows?follower=eq.${session.userId}&followee=eq.$userId", "DELETE", session.accessToken, prefer = "return=minimal") }
+    fun posts(session: Session): List<JsonObject> = JsonParser.parseString(request("/rest/v1/posts?select=id,user_id,body,created_at&order=created_at.desc&limit=80", "GET", session.accessToken)).asJsonArray.map { it.asJsonObject }
+    fun createPost(session: Session, body: String) {
+        val row = JsonObject().apply { addProperty("user_id", session.userId); addProperty("body", body.trim()) }
+        request("/rest/v1/posts", "POST", session.accessToken, row.toString(), "return=minimal")
+    }
+    fun deletePost(session: Session, id: String) { request("/rest/v1/posts?id=eq.$id&user_id=eq.${session.userId}", "DELETE", session.accessToken, prefer = "return=minimal") }
 }

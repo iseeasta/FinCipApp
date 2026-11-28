@@ -554,6 +554,8 @@ private fun ProfilePage(workspace: JsonObject, onProfileChange: (JsonObject.() -
         Spacer(Modifier.height(18.dp))
     }
 
+    com.fincip.nativeapp.ui.SocialStatsRow(workspace) { onNavigate("social") }
+
     // ── FinCip identity card (fully customisable)
     val idData = com.fincip.nativeapp.ui.IdData(p.name, p.handle, prog.level, rankOf(prog.level), prog.xpInLevel, prog.xp, unlocked.map { it.emoji }, unlocked.size, badges.size, txs.size, entryStreak(workspace), joinedShort ?: "")
     val idLook = com.fincip.nativeapp.ui.idLookOf(raw)

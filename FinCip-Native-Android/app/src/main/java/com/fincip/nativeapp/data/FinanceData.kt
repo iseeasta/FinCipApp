@@ -50,6 +50,8 @@ val NAV_PAGES = listOf(
     NavPage("household", "Household & sync", "Explore", "♧"),
     NavPage("security", "Privacy & backups", "Explore", "⬡"),
     NavPage("settings", "Settings & vibe", "Explore", "⚙"),
+    NavPage("social", "Friends & QR", "Explore", "☺"),
+    NavPage("universe", "My universe", "Explore", "✦"),
 )
 
 fun defaultWorkspace(): JsonObject {

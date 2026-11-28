@@ -890,6 +890,8 @@ private fun FinCipApp(store: FinanceStore, securePrefs: SecurePrefs) {
                         "forecast" -> ForecastScreen(workspace, privacy)
                         "insights" -> InsightsScreen(workspace, month, privacy)
                         "achievements" -> com.fincip.nativeapp.ui.AchievementsScreen(workspace, petProgress(workspace).level, petProgress(workspace).xp)
+                        "social" -> com.fincip.nativeapp.ui.SocialScreen(workspace, session, petProgress(workspace).level, { block -> updateWorkspace { root -> root.block() } }, { page = "household" }, { page = "universe" })
+                        "universe" -> com.fincip.nativeapp.ui.UniverseScreen(workspace, session, petProgress(workspace).level) { page = "social" }
                         "world" -> com.fincip.nativeapp.world.WorldScreen(workspace) { block -> updateWorkspace { root -> val w = root.objectOrEmpty("world"); w.block(); root.add("world", w) } }
                         "rules" -> RulesScreen(workspace, { openForm("rule") }, {
                             updateWorkspace { root ->
